@@ -1,0 +1,317 @@
+const { app, BrowserWindow, ipcMain } = require('electron');
+const path = require('path');
+const { closeDatabase } = require('./database/schema');
+const dbHandlers = require('./database/handlers');
+const { generatePDF } = require('./pdf/generator');
+const { printOrder } = require('./print/printer');
+
+let mainWindow;
+
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1400,
+    height: 900,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
+    },
+    icon: path.join(__dirname, '../../assets/icon.png')
+  });
+
+  // Load the app
+  if (process.env.NODE_ENV === 'development' || !app.isPackaged) {
+    mainWindow.loadURL('http://localhost:5173');
+    mainWindow.webContents.openDevTools();
+  } else {
+    mainWindow.loadFile(path.join(__dirname, '../../build/index.html'));
+  }
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+}
+
+app.whenReady().then(() => {
+  createWindow();
+  registerIPCHandlers();
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    }
+  });
+});
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    closeDatabase();
+    app.quit();
+  }
+});
+
+app.on('before-quit', () => {
+  closeDatabase();
+});
+
+// ============ IPC HANDLERS ============
+
+function registerIPCHandlers() {
+  // Dropdown Options
+  ipcMain.handle('get-dropdown-options', async (event, category) => {
+    try {
+      return { success: true, data: dbHandlers.getDropdownOptions(category) };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('get-all-dropdown-options', async () => {
+    try {
+      return { success: true, data: dbHandlers.getAllDropdownOptions() };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('add-dropdown-option', async (event, option) => {
+    try {
+      const id = dbHandlers.addDropdownOption(option);
+      return { success: true, data: { id } };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('update-dropdown-option', async (event, id, option) => {
+    try {
+      dbHandlers.updateDropdownOption(id, option);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('delete-dropdown-option', async (event, id) => {
+    try {
+      dbHandlers.deleteDropdownOption(id);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Doctors
+  ipcMain.handle('get-doctors', async () => {
+    try {
+      return { success: true, data: dbHandlers.getDoctors() };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('add-doctor', async (event, name) => {
+    try {
+      const id = dbHandlers.addDoctor(name);
+      return { success: true, data: { id } };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('update-doctor', async (event, id, name) => {
+    try {
+      dbHandlers.updateDoctor(id, name);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('delete-doctor', async (event, id) => {
+    try {
+      dbHandlers.deleteDoctor(id);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Frames
+  ipcMain.handle('get-frames', async () => {
+    try {
+      return { success: true, data: dbHandlers.getFrames() };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('get-frame-by-sku', async (event, sku) => {
+    try {
+      return { success: true, data: dbHandlers.getFrameBySku(sku) };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('add-frame', async (event, frame) => {
+    try {
+      const id = dbHandlers.addFrame(frame);
+      return { success: true, data: { id } };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('update-frame', async (event, id, frame) => {
+    try {
+      dbHandlers.updateFrame(id, frame);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('delete-frame', async (event, id) => {
+    try {
+      dbHandlers.deleteFrame(id);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Lens Categories
+  ipcMain.handle('get-lens-categories', async () => {
+    try {
+      return { success: true, data: dbHandlers.getLensCategories() };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('get-active-lens-categories', async () => {
+    try {
+      return { success: true, data: dbHandlers.getActiveLensCategories() };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('add-lens-category', async (event, category) => {
+    try {
+      const id = dbHandlers.addLensCategory(category);
+      return { success: true, data: { id } };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('update-lens-category', async (event, id, category) => {
+    try {
+      dbHandlers.updateLensCategory(id, category);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('delete-lens-category', async (event, id) => {
+    try {
+      dbHandlers.deleteLensCategory(id);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('toggle-lens-category-active', async (event, id) => {
+    try {
+      dbHandlers.toggleLensCategoryActive(id);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Orders
+  ipcMain.handle('create-order', async (event, orderData) => {
+    try {
+      const result = dbHandlers.createOrder(orderData);
+      return { success: true, data: result };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('get-orders', async (event, limit, offset) => {
+    try {
+      return { success: true, data: dbHandlers.getOrders(limit, offset) };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('get-order-by-id', async (event, id) => {
+    try {
+      return { success: true, data: dbHandlers.getOrderById(id) };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('search-orders', async (event, searchTerm) => {
+    try {
+      return { success: true, data: dbHandlers.searchOrders(searchTerm) };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('update-order', async (event, id, orderData) => {
+    try {
+      dbHandlers.updateOrder(id, orderData);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('delete-order', async (event, id) => {
+    try {
+      dbHandlers.deleteOrder(id);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // PDF Generation
+  ipcMain.handle('generate-pdf', async (event, orderId, savePath) => {
+    try {
+      const order = dbHandlers.getOrderById(orderId);
+      if (!order) {
+        return { success: false, error: 'Order not found' };
+      }
+      const pdfPath = await generatePDF(order, savePath);
+      return { success: true, data: { path: pdfPath } };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Print
+  ipcMain.handle('print-order', async (event, orderId) => {
+    try {
+      const order = dbHandlers.getOrderById(orderId);
+      if (!order) {
+        return { success: false, error: 'Order not found' };
+      }
+      await printOrder(order, mainWindow);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+}
+
