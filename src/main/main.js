@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const { closeDatabase } = require('./database/schema');
 const dbHandlers = require('./database/handlers');
@@ -309,6 +309,52 @@ function registerIPCHandlers() {
       }
       await printOrder(order, mainWindow);
       return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Settings
+  ipcMain.handle('get-setting', async (event, key) => {
+    try {
+      const value = dbHandlers.getSetting(key);
+      return { success: true, data: value };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('set-setting', async (event, key, value) => {
+    try {
+      dbHandlers.setSetting(key, value);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('get-all-settings', async () => {
+    try {
+      const settings = dbHandlers.getAllSettings();
+      return { success: true, data: settings };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Directory Picker
+  ipcMain.handle('select-directory', async () => {
+    try {
+      const result = await dialog.showOpenDialog(mainWindow, {
+        properties: ['openDirectory', 'createDirectory'],
+        title: 'Select PDF Save Location'
+      });
+
+      if (result.canceled) {
+        return { success: false, canceled: true };
+      }
+
+      return { success: true, data: result.filePaths[0] };
     } catch (error) {
       return { success: false, error: error.message };
     }

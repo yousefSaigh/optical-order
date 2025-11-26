@@ -41,6 +41,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // PDF & Print
   generatePDF: (orderId, savePath) => ipcRenderer.invoke('generate-pdf', orderId, savePath),
-  printOrder: (orderId) => ipcRenderer.invoke('print-order', orderId)
+  printOrder: (orderId) => ipcRenderer.invoke('print-order', orderId),
+
+  // Settings
+  getSetting: (key) => ipcRenderer.invoke('get-setting', key),
+  setSetting: (key, value) => ipcRenderer.invoke('set-setting', key, value),
+  getAllSettings: () => ipcRenderer.invoke('get-all-settings'),
+  selectDirectory: () => ipcRenderer.invoke('select-directory')
 });
 

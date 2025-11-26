@@ -74,6 +74,73 @@ function runMigrations() {
       migrateLensDataToJson();
     }
 
+    // Migration 3: Add new other charges fields
+    const hasOtherPercentAdjustment = tableInfo.some(col => col.name === 'other_percent_adjustment');
+    const hasIWellness = tableInfo.some(col => col.name === 'iwellness');
+    const hasIWellnessPrice = tableInfo.some(col => col.name === 'iwellness_price');
+    const hasCustomServiceDescription = tableInfo.some(col => col.name === 'custom_service_description');
+    const hasCustomServicePrice = tableInfo.some(col => col.name === 'custom_service_price');
+
+    if (!hasOtherPercentAdjustment) {
+      console.log('Migration 3a: Adding other_percent_adjustment column...');
+      db.prepare(`ALTER TABLE orders ADD COLUMN other_percent_adjustment REAL DEFAULT 0`).run();
+      console.log('✅ Added other_percent_adjustment column');
+    }
+
+    if (!hasIWellness) {
+      console.log('Migration 3b: Adding iwellness column...');
+      db.prepare(`ALTER TABLE orders ADD COLUMN iwellness TEXT DEFAULT 'no'`).run();
+      console.log('✅ Added iwellness column');
+    }
+
+    if (!hasIWellnessPrice) {
+      console.log('Migration 3c: Adding iwellness_price column...');
+      db.prepare(`ALTER TABLE orders ADD COLUMN iwellness_price REAL DEFAULT 0`).run();
+      console.log('✅ Added iwellness_price column');
+    }
+
+    if (!hasCustomServiceDescription) {
+      console.log('Migration 3d: Adding custom_service_description column...');
+      db.prepare(`ALTER TABLE orders ADD COLUMN custom_service_description TEXT`).run();
+      console.log('✅ Added custom_service_description column');
+    }
+
+    if (!hasCustomServicePrice) {
+      console.log('Migration 3e: Adding custom_service_price column...');
+      db.prepare(`ALTER TABLE orders ADD COLUMN custom_service_price REAL DEFAULT 0`).run();
+      console.log('✅ Added custom_service_price column');
+    }
+
+    // Migration 4: Add other charge fields
+    const hasOtherCharge1Type = tableInfo.some(col => col.name === 'other_charge_1_type');
+    const hasOtherCharge1Price = tableInfo.some(col => col.name === 'other_charge_1_price');
+    const hasOtherCharge2Type = tableInfo.some(col => col.name === 'other_charge_2_type');
+    const hasOtherCharge2Price = tableInfo.some(col => col.name === 'other_charge_2_price');
+
+    if (!hasOtherCharge1Type) {
+      console.log('Migration 4a: Adding other_charge_1_type column...');
+      db.prepare(`ALTER TABLE orders ADD COLUMN other_charge_1_type TEXT DEFAULT 'none'`).run();
+      console.log('✅ Added other_charge_1_type column');
+    }
+
+    if (!hasOtherCharge1Price) {
+      console.log('Migration 4b: Adding other_charge_1_price column...');
+      db.prepare(`ALTER TABLE orders ADD COLUMN other_charge_1_price REAL DEFAULT 0`).run();
+      console.log('✅ Added other_charge_1_price column');
+    }
+
+    if (!hasOtherCharge2Type) {
+      console.log('Migration 4c: Adding other_charge_2_type column...');
+      db.prepare(`ALTER TABLE orders ADD COLUMN other_charge_2_type TEXT DEFAULT 'none'`).run();
+      console.log('✅ Added other_charge_2_type column');
+    }
+
+    if (!hasOtherCharge2Price) {
+      console.log('Migration 4d: Adding other_charge_2_price column...');
+      db.prepare(`ALTER TABLE orders ADD COLUMN other_charge_2_price REAL DEFAULT 0`).run();
+      console.log('✅ Added other_charge_2_price column');
+    }
+
     console.log('✅ All migrations completed successfully');
   } catch (error) {
     console.error('Migration error:', error);
@@ -213,6 +280,15 @@ function initializeDatabase() {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- Application Settings Table
+    CREATE TABLE IF NOT EXISTS app_settings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      setting_key TEXT UNIQUE NOT NULL,
+      setting_value TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     -- Frame Inventory Table
     CREATE TABLE IF NOT EXISTS frames (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -297,7 +373,14 @@ function initializeDatabase() {
       -- Other Charges
       other_charges_adjustment REAL DEFAULT 0,
       other_charges_notes TEXT,
-      
+      other_percent_adjustment REAL DEFAULT 0,
+      iwellness TEXT DEFAULT 'no',
+      iwellness_price REAL DEFAULT 0,
+      other_charge_1_type TEXT DEFAULT 'none',
+      other_charge_1_price REAL DEFAULT 0,
+      other_charge_2_type TEXT DEFAULT 'none',
+      other_charge_2_price REAL DEFAULT 0,
+
       -- Payment
       payment_today REAL DEFAULT 0,
       balance_due REAL DEFAULT 0,

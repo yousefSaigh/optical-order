@@ -22,8 +22,13 @@ function AdminPanel() {
   const [newLensCategory, setNewLensCategory] = useState({ category_key: '', display_label: '', sort_order: '' });
   const [categories, setCategories] = useState([]);
 
+  // Settings state
+  const [pdfSaveLocation, setPdfSaveLocation] = useState('');
+  const [defaultPdfLocation, setDefaultPdfLocation] = useState('');
+
   useEffect(() => {
     loadData();
+    loadSettings();
   }, []);
 
   const loadData = async () => {
@@ -279,6 +284,53 @@ function AdminPanel() {
     }
   };
 
+  // ============ SETTINGS HANDLERS ============
+
+  const loadSettings = async () => {
+    try {
+      // Get custom PDF save location
+      const result = await window.electronAPI.getSetting('pdf_save_location');
+      if (result.success && result.data) {
+        setPdfSaveLocation(result.data);
+      } else {
+        // Set default location display
+        const defaultPath = 'C:\\Users\\Owner\\Documents\\OpticalOrders';
+        setPdfSaveLocation('');
+        setDefaultPdfLocation(defaultPath);
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error);
+    }
+  };
+
+  const handleSelectPdfLocation = async () => {
+    const result = await window.electronAPI.selectDirectory();
+    if (result.success && result.data) {
+      // Save the selected directory
+      const saveResult = await window.electronAPI.setSetting('pdf_save_location', result.data);
+      if (saveResult.success) {
+        setPdfSaveLocation(result.data);
+        alert(`PDF save location updated to:\n${result.data}`);
+      } else {
+        alert(`Error saving setting: ${saveResult.error}`);
+      }
+    } else if (!result.canceled) {
+      alert(`Error selecting directory: ${result.error}`);
+    }
+  };
+
+  const handleResetPdfLocation = async () => {
+    if (window.confirm('Reset PDF save location to default?\n\nDefault: Documents/OpticalOrders')) {
+      const result = await window.electronAPI.setSetting('pdf_save_location', null);
+      if (result.success) {
+        setPdfSaveLocation('');
+        alert('PDF save location reset to default');
+      } else {
+        alert(`Error resetting location: ${result.error}`);
+      }
+    }
+  };
+
   return (
     <div className="admin-panel-container">
       <h2>Admin Panel</h2>
@@ -308,6 +360,12 @@ function AdminPanel() {
           onClick={() => setActiveTab('frames')}
         >
           Frame Inventory
+        </button>
+        <button
+          className={`tab ${activeTab === 'settings' ? 'active' : ''}`}
+          onClick={() => setActiveTab('settings')}
+        >
+          Settings
         </button>
       </div>
 
@@ -809,6 +867,59 @@ function AdminPanel() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Settings Tab */}
+      {activeTab === 'settings' && (
+        <div className="tab-content">
+          <h3>Application Settings</h3>
+
+          {/* PDF Save Location Section */}
+          <div className="settings-section">
+            <h4>PDF Save Location</h4>
+            <p className="info-text">
+              Configure where PDF order files are saved. By default, PDFs are saved to your Documents/OpticalOrders folder.
+            </p>
+
+            <div className="settings-item">
+              <label>Current Save Location:</label>
+              <div className="location-display">
+                {pdfSaveLocation ? (
+                  <div className="custom-location">
+                    <span className="location-badge">Custom</span>
+                    <code>{pdfSaveLocation}</code>
+                  </div>
+                ) : (
+                  <div className="default-location">
+                    <span className="location-badge default">Default</span>
+                    <code>Documents\OpticalOrders</code>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="settings-actions">
+              <button onClick={handleSelectPdfLocation} className="btn btn-primary">
+                📁 Change Save Location
+              </button>
+              {pdfSaveLocation && (
+                <button onClick={handleResetPdfLocation} className="btn btn-secondary">
+                  🔄 Reset to Default
+                </button>
+              )}
+            </div>
+
+            <div className="settings-help">
+              <p><strong>Note:</strong></p>
+              <ul>
+                <li>Choose a location that is regularly backed up</li>
+                <li>Ensure the selected folder has sufficient storage space</li>
+                <li>The folder will be created automatically if it doesn't exist</li>
+                <li>Existing PDFs will remain in their current location</li>
+              </ul>
+            </div>
           </div>
         </div>
       )}

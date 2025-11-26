@@ -2,45 +2,40 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
+const { getSetting } = require('../database/handlers');
 
-function generatePDF(order, savePath) {
-  return new Promise((resolve, reject) => {
-    try {
-      // If no save path provided, use default location
-      if (!savePath) {
-        const documentsPath = app.getPath('documents');
-        const ordersDir = path.join(documentsPath, 'OpticalOrders');
-        if (!fs.existsSync(ordersDir)) {
-          fs.mkdirSync(ordersDir, { recursive: true });
-        }
-        savePath = path.join(ordersDir, `Order_${order.order_number}.pdf`);
-      }
+// Helper function to draw section headers
+function drawSection(doc, title) {
+  doc.font('Helvetica-Bold')
+     .fontSize(11)
+     .text(title, 50)
+     .moveDown(0.3);
+  doc.font('Helvetica')
+     .fontSize(10);
+}
 
-      const doc = new PDFDocument({ margin: 50, size: 'LETTER' });
-      const stream = fs.createWriteStream(savePath);
+// Helper function to build the PDF document content
+function buildPDFContent(doc, order) {
+  // Header - Reduced size for single-page fit
+  doc.fontSize(16).text('Quality Eye Clinic Elgin', { align: 'center' });
+  doc.fontSize(12).text('Optical Order', { align: 'center' });
+  doc.moveDown(0.5);
 
-      doc.pipe(stream);
+  // Order Info
+  doc.fontSize(10);
+  doc.text(`Order Number: ${order.order_number}`, 50, doc.y);
+  doc.text(`Date: ${order.order_date}`, 350, doc.y - 12);
+  doc.moveDown(0.5);
 
-      // Header - Reduced size for single-page fit
-      doc.fontSize(16).text('Quality Eye Clinic Elgin', { align: 'center' });
-      doc.fontSize(12).text('Optical Order', { align: 'center' });
-      doc.moveDown(0.5);
-
-      // Order Info
-      doc.fontSize(10);
-      doc.text(`Order Number: ${order.order_number}`, 50, doc.y);
-      doc.text(`Date: ${order.order_date}`, 350, doc.y - 12);
-      doc.moveDown(0.5);
-
-      // Patient Information Section
-      drawSection(doc, 'Patient Information');
-      doc.fontSize(10);
-      doc.text(`Patient: ${order.patient_name}`, 50);
-      doc.text(`Account #: ${order.account_number || 'N/A'}`, 50);
-      doc.text(`Doctor: ${order.doctor_name || 'N/A'}`, 50);
-      doc.text(`Insurance: ${order.insurance || 'N/A'}`, 50);
-      doc.text(`Sold By: ${order.sold_by || 'N/A'}`, 50);
-      doc.moveDown(0.5);
+  // Patient Information Section
+  drawSection(doc, 'Patient Information');
+  doc.fontSize(10);
+  doc.text(`Patient: ${order.patient_name}`, 50);
+  doc.text(`Account #: ${order.account_number || 'N/A'}`, 50);
+  doc.text(`Doctor: ${order.doctor_name || 'N/A'}`, 50);
+  doc.text(`Insurance: ${order.insurance || 'N/A'}`, 50);
+  doc.text(`Sold By: ${order.sold_by || 'N/A'}`, 50);
+  doc.moveDown(0.5);
 
       // Prescription Details Section
       drawSection(doc, 'Prescription Details');
@@ -197,6 +192,44 @@ function generatePDF(order, savePath) {
       doc.fontSize(10);
       doc.moveDown(0.5);
 
+      // Other Charges Section
+      if (order.other_percent_adjustment > 0 || order.iwellness === 'yes' || order.other_charge_1_price > 0 || order.other_charge_2_price > 0 || order.other_charges_notes) {
+        drawSection(doc, 'Other Charges');
+
+        if (order.other_percent_adjustment > 0) {
+          const baseAmount = order.final_price - (order.payment_today || 0);
+          const percentAdjustment = baseAmount * (order.other_percent_adjustment / 100);
+          doc.text(`Other % Adjustment (${order.other_percent_adjustment}%): -$${percentAdjustment.toFixed(2)}`, 50);
+          doc.moveDown(0.3);
+        }
+
+        if (order.iwellness === 'yes') {
+          doc.text(`iWellness: $${(order.iwellness_price || 39.00).toFixed(2)}`, 50);
+          doc.moveDown(0.3);
+        }
+
+        if (order.other_charge_1_type && order.other_charge_1_type !== 'none' && order.other_charge_1_price > 0) {
+          const chargeLabel = order.other_charge_1_type === 'exam_copay' ? 'Exam Copay' :
+                             order.other_charge_1_type === 'cl_exam' ? 'CL Exam' : 'Other Charge';
+          doc.text(`${chargeLabel}: $${(order.other_charge_1_price || 0).toFixed(2)}`, 50);
+          doc.moveDown(0.3);
+        }
+
+        if (order.other_charge_2_type && order.other_charge_2_type !== 'none' && order.other_charge_2_price > 0) {
+          const chargeLabel = order.other_charge_2_type === 'exam_copay' ? 'Exam Copay' :
+                             order.other_charge_2_type === 'cl_exam' ? 'CL Exam' : 'Other Charge';
+          doc.text(`${chargeLabel}: $${(order.other_charge_2_price || 0).toFixed(2)}`, 50);
+          doc.moveDown(0.3);
+        }
+
+        if (order.other_charges_notes) {
+          doc.text(`Notes: ${order.other_charges_notes}`, 50);
+          doc.moveDown(0.3);
+        }
+
+        doc.moveDown(0.2);
+      }
+
       // Payment Section
       drawSection(doc, 'Payment');
       doc.text(`Payment Today: $${(order.payment_today || 0).toFixed(2)}`, 50);
@@ -210,11 +243,48 @@ function generatePDF(order, savePath) {
         doc.moveDown(0.5);
       }
 
-      // Footer
-      if (order.verified_by) {
-        doc.text(`Verified By (Initials): ${order.verified_by}`, 50);
+  // Footer
+  if (order.verified_by) {
+    doc.text(`Verified By (Initials): ${order.verified_by}`, 50);
+  }
+}
+
+// Generate PDF and save to file
+function generatePDF(order, savePath) {
+  return new Promise((resolve, reject) => {
+    try {
+      // If no save path provided, use custom or default location
+      if (!savePath) {
+        // Check for custom PDF save location in settings
+        const customPath = getSetting('pdf_save_location');
+
+        let ordersDir;
+        if (customPath && fs.existsSync(customPath)) {
+          // Use custom path from settings
+          ordersDir = customPath;
+        } else {
+          // Use default location
+          const documentsPath = app.getPath('documents');
+          ordersDir = path.join(documentsPath, 'OpticalOrders');
+        }
+
+        // Ensure directory exists
+        if (!fs.existsSync(ordersDir)) {
+          fs.mkdirSync(ordersDir, { recursive: true });
+        }
+
+        savePath = path.join(ordersDir, `Order_${order.order_number}.pdf`);
       }
 
+      const doc = new PDFDocument({ margin: 50, size: 'LETTER' });
+      const stream = fs.createWriteStream(savePath);
+
+      doc.pipe(stream);
+
+      // Build the PDF content
+      buildPDFContent(doc, order);
+
+      // End the document
       doc.end();
 
       stream.on('finish', () => {
@@ -231,14 +301,31 @@ function generatePDF(order, savePath) {
   });
 }
 
-function drawSection(doc, title) {
-  doc.font('Helvetica-Bold')
-     .fontSize(11)
-     .text(title, 50)
-     .moveDown(0.3);
-  doc.font('Helvetica')
-     .fontSize(10);
+// Generate PDF buffer for printing (returns Buffer instead of saving to file)
+function generatePDFBuffer(order) {
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({ margin: 50, size: 'LETTER' });
+      const buffers = [];
+
+      doc.on('data', buffers.push.bind(buffers));
+      doc.on('end', () => {
+        const pdfBuffer = Buffer.concat(buffers);
+        resolve(pdfBuffer);
+      });
+      doc.on('error', reject);
+
+      // Build the PDF content
+      buildPDFContent(doc, order);
+
+      // End the document
+      doc.end();
+
+    } catch (error) {
+      reject(error);
+    }
+  });
 }
 
-module.exports = { generatePDF };
+module.exports = { generatePDF, generatePDFBuffer };
 

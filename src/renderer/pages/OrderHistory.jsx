@@ -319,12 +319,66 @@ function OrderHistory() {
                     <strong>Final Price:</strong>
                     <strong>{formatCurrency(selectedOrder.final_price)}</strong>
                   </div>
+                </div>
+              </section>
+
+              {/* Other Charges Section */}
+              {(selectedOrder.other_percent_adjustment > 0 || selectedOrder.iwellness === 'yes' ||
+                selectedOrder.other_charge_1_price > 0 || selectedOrder.other_charge_2_price > 0 ||
+                selectedOrder.other_charges_notes) && (
+                <section className="detail-section">
+                  <h4>Other Charges</h4>
+                  <div className="pricing-breakdown">
+                    {selectedOrder.other_percent_adjustment > 0 && (
+                      <div className="pricing-row">
+                        <span>Other % Adjustment ({selectedOrder.other_percent_adjustment}%):</span>
+                        <span>-{formatCurrency((selectedOrder.final_price - (selectedOrder.payment_today || 0)) * (selectedOrder.other_percent_adjustment / 100))}</span>
+                      </div>
+                    )}
+                    {selectedOrder.iwellness === 'yes' && (
+                      <div className="pricing-row">
+                        <span>iWellness:</span>
+                        <span>{formatCurrency(selectedOrder.iwellness_price || 39.00)}</span>
+                      </div>
+                    )}
+                    {selectedOrder.other_charge_1_type && selectedOrder.other_charge_1_type !== 'none' && selectedOrder.other_charge_1_price > 0 && (
+                      <div className="pricing-row">
+                        <span>
+                          {selectedOrder.other_charge_1_type === 'exam_copay' ? 'Exam Copay' :
+                           selectedOrder.other_charge_1_type === 'cl_exam' ? 'CL Exam' : 'Other Charge'}:
+                        </span>
+                        <span>{formatCurrency(selectedOrder.other_charge_1_price)}</span>
+                      </div>
+                    )}
+                    {selectedOrder.other_charge_2_type && selectedOrder.other_charge_2_type !== 'none' && selectedOrder.other_charge_2_price > 0 && (
+                      <div className="pricing-row">
+                        <span>
+                          {selectedOrder.other_charge_2_type === 'exam_copay' ? 'Exam Copay' :
+                           selectedOrder.other_charge_2_type === 'cl_exam' ? 'CL Exam' : 'Other Charge'}:
+                        </span>
+                        <span>{formatCurrency(selectedOrder.other_charge_2_price)}</span>
+                      </div>
+                    )}
+                    {selectedOrder.other_charges_notes && (
+                      <div className="pricing-row">
+                        <span>Notes:</span>
+                        <span>{selectedOrder.other_charges_notes}</span>
+                      </div>
+                    )}
+                  </div>
+                </section>
+              )}
+
+              {/* Payment Section */}
+              <section className="detail-section">
+                <h4>Payment</h4>
+                <div className="pricing-breakdown">
                   <div className="pricing-row">
                     <span>Payment Today:</span>
                     <span>{formatCurrency(selectedOrder.payment_today)}</span>
                   </div>
                   <div className="pricing-row">
-                    <span>Balance Due:</span>
+                    <span>Balance Due at Pick Up:</span>
                     <span>{formatCurrency(selectedOrder.balance_due)}</span>
                   </div>
                 </div>

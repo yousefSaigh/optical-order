@@ -231,6 +231,8 @@ function createOrder(orderData) {
       total_lens_charges, regular_price, sales_tax, insurance_copay, you_pay, you_saved,
       warranty_type, warranty_price, final_price,
       other_charges_adjustment, other_charges_notes,
+      other_percent_adjustment, iwellness, iwellness_price,
+      other_charge_1_type, other_charge_1_price, other_charge_2_type, other_charge_2_price,
       payment_today, balance_due, special_notes, verified_by, status
     ) VALUES (
       ?, ?, ?, ?, ?, ?, ?,
@@ -244,6 +246,8 @@ function createOrder(orderData) {
       ?,
       ?, ?, ?, ?, ?, ?,
       ?, ?, ?,
+      ?, ?,
+      ?, ?, ?, ?, ?,
       ?, ?,
       ?, ?, ?, ?, ?
     )
@@ -302,6 +306,13 @@ function createOrder(orderData) {
     orderData.final_price || 0,
     orderData.other_charges_adjustment || 0,
     orderData.other_charges_notes || '',
+    orderData.other_percent_adjustment || 0,
+    orderData.iwellness || 'no',
+    orderData.iwellness_price || 0,
+    orderData.other_charge_1_type || 'none',
+    orderData.other_charge_1_price || 0,
+    orderData.other_charge_2_type || 'none',
+    orderData.other_charge_2_price || 0,
     orderData.payment_today || 0,
     orderData.balance_due || 0,
     orderData.special_notes || '',
@@ -435,6 +446,41 @@ module.exports = {
   getOrderById,
   searchOrders,
   updateOrder,
-  deleteOrder
+  deleteOrder,
+
+  // Settings
+  getSetting,
+  setSetting,
+  getAllSettings
 };
+
+// ============ SETTINGS ============
+
+function getSetting(key) {
+  const db = getDatabase();
+  const result = db.prepare('SELECT setting_value FROM app_settings WHERE setting_key = ?').get(key);
+  return result ? result.setting_value : null;
+}
+
+function setSetting(key, value) {
+  const db = getDatabase();
+  const stmt = db.prepare(`
+    INSERT INTO app_settings (setting_key, setting_value)
+    VALUES (?, ?)
+    ON CONFLICT(setting_key) DO UPDATE SET
+      setting_value = excluded.setting_value,
+      updated_at = CURRENT_TIMESTAMP
+  `);
+  stmt.run(key, value);
+}
+
+function getAllSettings() {
+  const db = getDatabase();
+  const rows = db.prepare('SELECT setting_key, setting_value FROM app_settings').all();
+  const settings = {};
+  rows.forEach(row => {
+    settings[row.setting_key] = row.setting_value;
+  });
+  return settings;
+}
 

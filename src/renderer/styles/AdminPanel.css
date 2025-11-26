@@ -248,3 +248,98 @@
   }
 }
 
+/* Settings Tab Styles */
+.settings-section {
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.settings-section h4 {
+  color: #2c3e50;
+  margin-bottom: 0.5rem;
+  font-size: 1.25rem;
+}
+
+.settings-item {
+  margin: 1.5rem 0;
+}
+
+.settings-item label {
+  display: block;
+  font-weight: 600;
+  color: #34495e;
+  margin-bottom: 0.5rem;
+}
+
+.location-display {
+  background-color: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.location-display code {
+  font-family: 'Courier New', monospace;
+  font-size: 0.95rem;
+  color: #2c3e50;
+  background-color: #ecf0f1;
+  padding: 0.25rem 0.5rem;
+  border-radius: 3px;
+}
+
+.custom-location,
+.default-location {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.location-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  background-color: #3498db;
+  color: white;
+}
+
+.location-badge.default {
+  background-color: #95a5a6;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.settings-help {
+  background-color: #e8f4f8;
+  border-left: 4px solid #3498db;
+  padding: 1rem;
+  margin-top: 1.5rem;
+  border-radius: 4px;
+}
+
+.settings-help p {
+  margin: 0 0 0.5rem 0;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.settings-help ul {
+  margin: 0.5rem 0 0 1.5rem;
+  padding: 0;
+}
+
+.settings-help li {
+  margin: 0.25rem 0;
+  color: #34495e;
+  font-size: 0.9rem;
+}
+

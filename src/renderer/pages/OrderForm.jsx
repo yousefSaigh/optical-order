@@ -73,6 +73,13 @@ function OrderForm() {
     // Other
     other_charges_adjustment: 0,
     other_charges_notes: '',
+    other_percent_adjustment: 0,
+    iwellness: 'no',
+    iwellness_price: 0,
+    custom_charge_1_type: 'none',
+    custom_charge_1_price: 0,
+    custom_charge_2_type: 'none',
+    custom_charge_2_price: 0,
     payment_today: 0,
     balance_due: 0,
     special_notes: '',
@@ -105,7 +112,12 @@ function OrderForm() {
     formData.frame_price,
     formData.warranty_price,
     formData.insurance_copay,
-    formData.other_charges_adjustment
+    formData.other_charges_adjustment,
+    formData.payment_today,
+    formData.other_percent_adjustment,
+    formData.iwellness_price,
+    formData.other_charge_1_price,
+    formData.other_charge_2_price
   ]);
 
   const loadDoctors = async () => {
@@ -189,6 +201,14 @@ function OrderForm() {
     }));
   };
 
+  const handleIWellnessChange = (value) => {
+    setFormData(prev => ({
+      ...prev,
+      iwellness: value,
+      iwellness_price: value === 'yes' ? 39.00 : 0
+    }));
+  };
+
   const handleFrameSkuChange = async (e) => {
     const sku = e.target.value;
     setFormData(prev => ({ ...prev, frame_sku: sku }));
@@ -247,24 +267,43 @@ function OrderForm() {
     // Use whichever is greater (handles both new and legacy data)
     totalLensCharges = Math.max(totalLensCharges, legacyLensTotal);
 
-    // Calculate regular price (frame + lenses)
-    const regularPrice = (parseFloat(formData.frame_price) || 0) + totalLensCharges;
-    
-    // Calculate sales tax (2.25%)
-    const salesTax = regularPrice * 0.0225;
-    
-    // Calculate you pay (regular price + tax - insurance copay + other charges)
-    const youPay = regularPrice + salesTax - (parseFloat(formData.insurance_copay) || 0) + (parseFloat(formData.other_charges_adjustment) || 0);
+    // Calculate regular price (frame + lenses) - round to 2 decimals
+    const regularPrice = parseFloat(((parseFloat(formData.frame_price) || 0) + totalLensCharges).toFixed(2));
 
-    // Calculate final price (you pay + warranty)
-    const finalPrice = youPay + (parseFloat(formData.warranty_price) || 0);
-    
-    // Calculate balance due
-    const balanceDue = finalPrice - (parseFloat(formData.payment_today) || 0);
+    // Calculate sales tax (2.25%) - round to 2 decimals
+    const salesTax = parseFloat((regularPrice * 0.0225).toFixed(2));
+
+    // Calculate you pay (regular price + tax - insurance copay + other charges) - round to 2 decimals
+    const youPay = parseFloat((regularPrice + salesTax - (parseFloat(formData.insurance_copay) || 0) + (parseFloat(formData.other_charges_adjustment) || 0)).toFixed(2));
+
+    // Calculate final price (you pay + warranty) - round to 2 decimals
+    const finalPrice = parseFloat((youPay + (parseFloat(formData.warranty_price) || 0)).toFixed(2));
+
+    // Calculate balance due with new adjustments
+    // Step 1: Start with final price - payment today
+    let balanceDue = finalPrice - (parseFloat(formData.payment_today) || 0);
+
+    // Step 2: Subtract percentage adjustment (percentage of balance due)
+    const percentAdjustment = parseFloat((balanceDue * ((parseFloat(formData.other_percent_adjustment) || 0) / 100)).toFixed(2));
+    balanceDue -= percentAdjustment;
+
+    // Step 3: Add iWellness fee
+    const iwellnessFee = parseFloat(formData.iwellness_price) || 0;
+    balanceDue += iwellnessFee;
+
+    // Step 4: Add other charge prices
+    const otherCharge1Price = parseFloat(formData.other_charge_1_price) || 0;
+    balanceDue += otherCharge1Price;
+
+    const otherCharge2Price = parseFloat(formData.other_charge_2_price) || 0;
+    balanceDue += otherCharge2Price;
+
+    // Final rounding
+    balanceDue = parseFloat(balanceDue.toFixed(2));
 
     setFormData(prev => ({
       ...prev,
-      total_lens_charges: totalLensCharges,
+      total_lens_charges: parseFloat(totalLensCharges.toFixed(2)),
       regular_price: regularPrice,
       sales_tax: salesTax,
       you_pay: youPay,
@@ -659,15 +698,103 @@ function OrderForm() {
         {/* Other Charges Section */}
         <section className="form-section">
           <h3>Other Charges</h3>
-          <div className="form-grid">
-            <div className="form-group full-width">
-              <label>Notes</label>
-              <textarea
-                name="other_charges_notes"
-                value={formData.other_charges_notes}
-                onChange={handleInputChange}
-                rows="2"
-              />
+          <div className="other-charges-grid">
+            {/* Other % Adjustment Row */}
+            <div className="charge-row">
+              <div className="charge-label">Other % Adjustment</div>
+              <div className="charge-input">
+                <input
+                  type="number"
+                  name="other_percent_adjustment"
+                  value={formData.other_percent_adjustment}
+                  onChange={handleInputChange}
+                  step="0.01"
+                  min="0"
+                  placeholder="0"
+                  className="percent-input"
+                />
+                <span className="percent-symbol">%</span>
+              </div>
+              <div className="charge-amount">
+                -${parseFloat((formData.final_price - (parseFloat(formData.payment_today) || 0)) * ((parseFloat(formData.other_percent_adjustment) || 0) / 100)).toFixed(2)}
+              </div>
+            </div>
+
+            {/* iWellness Row */}
+            <div className="charge-row">
+              <div className="charge-label">iWellness</div>
+              <div className="charge-input">
+                <select
+                  name="iwellness"
+                  value={formData.iwellness}
+                  onChange={(e) => handleIWellnessChange(e.target.value)}
+                  className="iwellness-select"
+                >
+                  <option value="no">No</option>
+                  <option value="yes">Yes</option>
+                </select>
+              </div>
+              <div className="charge-amount">
+                ${formData.iwellness === 'yes' ? '39.00' : '0.00'}
+              </div>
+            </div>
+
+            {/* Other Charge 1 Row */}
+            <div className="charge-row">
+              <div className="charge-label">Other Charge</div>
+              <div className="charge-input">
+                <select
+                  name="other_charge_1_type"
+                  value={formData.other_charge_1_type}
+                  onChange={handleInputChange}
+                  className="iwellness-select"
+                >
+                  <option value="none">None</option>
+                  <option value="exam_copay">Exam Copay</option>
+                  <option value="cl_exam">CL Exam</option>
+                </select>
+              </div>
+              <div className="charge-amount">
+                <input
+                  type="number"
+                  name="other_charge_1_price"
+                  value={formData.other_charge_1_price}
+                  onChange={handleInputChange}
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  className="price-input-small"
+                />
+              </div>
+            </div>
+
+            {/* Other Charge 2 Row */}
+            <div className="charge-row">
+              <div className="charge-label">Other Charge</div>
+              <div className="charge-input">
+                <select
+                  name="other_charge_2_type"
+                  value={formData.other_charge_2_type}
+                  onChange={handleInputChange}
+                  className="iwellness-select"
+                >
+                  <option value="none">None</option>
+                  <option value="exam_copay">Exam Copay</option>
+                  <option value="cl_exam">CL Exam</option>
+                </select>
+              </div>
+              <div className="charge-amount">
+                <input
+                  type="number"
+                  name="other_charge_2_price"
+                  value={formData.other_charge_2_price}
+                  onChange={handleInputChange}
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  className="price-input-small"
+                />
+              </div>
             </div>
           </div>
         </section>
