@@ -15,7 +15,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   addDoctor: (name) => ipcRenderer.invoke('add-doctor', name),
   updateDoctor: (id, name) => ipcRenderer.invoke('update-doctor', id, name),
   deleteDoctor: (id) => ipcRenderer.invoke('delete-doctor', id),
-  
+
+  // Insurance Providers
+  getInsuranceProviders: () => ipcRenderer.invoke('get-insurance-providers'),
+  addInsuranceProvider: (name) => ipcRenderer.invoke('add-insurance-provider', name),
+  updateInsuranceProvider: (id, name) => ipcRenderer.invoke('update-insurance-provider', id, name),
+  deleteInsuranceProvider: (id) => ipcRenderer.invoke('delete-insurance-provider', id),
+
   // Frames
   getFrames: () => ipcRenderer.invoke('get-frames'),
   getFrameBySku: (sku) => ipcRenderer.invoke('get-frame-by-sku', sku),

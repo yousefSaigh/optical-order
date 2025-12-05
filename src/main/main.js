@@ -137,6 +137,42 @@ function registerIPCHandlers() {
     }
   });
 
+  // Insurance Providers
+  ipcMain.handle('get-insurance-providers', async () => {
+    try {
+      return { success: true, data: dbHandlers.getInsuranceProviders() };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('add-insurance-provider', async (event, name) => {
+    try {
+      const id = dbHandlers.addInsuranceProvider(name);
+      return { success: true, data: { id } };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('update-insurance-provider', async (event, id, name) => {
+    try {
+      dbHandlers.updateInsuranceProvider(id, name);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('delete-insurance-provider', async (event, id) => {
+    try {
+      dbHandlers.deleteInsuranceProvider(id);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
   // Frames
   ipcMain.handle('get-frames', async () => {
     try {

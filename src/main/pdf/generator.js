@@ -40,39 +40,29 @@ function buildPDFContent(doc, order) {
       // Prescription Details Section
       drawSection(doc, 'Prescription Details');
       doc.fontSize(10);
-      doc.text(`PD: ${order.pd || 'N/A'}`, 50);
       doc.moveDown(0.3);
 
-      // Create prescription table
+      // Create simplified prescription table with 3 columns
       const tableTop = doc.y;
-      const col1 = 50;
-      const col2 = 120;
-      const col3 = 210;
-      const col4 = 300;
-      const col5 = 390;
+      const col1 = 50;   // Label
+      const col2 = 150;  // OD (Right)
+      const col3 = 250;  // OS (Left)
 
       doc.font('Helvetica-Bold');
       doc.text('', col1, tableTop);
-      doc.text('Sphere', col2, tableTop);
-      doc.text('Cylinder', col3, tableTop);
-      doc.text('Axis', col4, tableTop);
-      doc.text('Add', col5, tableTop);
+      doc.text('OD (Right)', col2, tableTop);
+      doc.text('OS (Left)', col3, tableTop);
 
       doc.font('Helvetica');
-      doc.text('OD', col1, tableTop + 15);
-      doc.text(order.od_sphere || '', col2, tableTop + 15);
-      doc.text(order.od_cylinder || '', col3, tableTop + 15);
-      doc.text(order.od_axis || '', col4, tableTop + 15);
-      doc.text(order.od_add || '', col5, tableTop + 15);
+      doc.text('PD', col1, tableTop + 15);
+      doc.text(order.od_pd || '', col2, tableTop + 15);
+      doc.text(order.os_pd || '', col3, tableTop + 15);
 
-      doc.text('OS', col1, tableTop + 30);
-      doc.text(order.os_sphere || '', col2, tableTop + 30);
-      doc.text(order.os_cylinder || '', col3, tableTop + 30);
-      doc.text(order.os_axis || '', col4, tableTop + 30);
-      doc.text(order.os_add || '', col5, tableTop + 30);
+      doc.text('Seg Height', col1, tableTop + 30);
+      doc.text(order.od_seg_height || '', col2, tableTop + 30);
+      doc.text(order.os_seg_height || '', col3, tableTop + 30);
 
-      doc.y = tableTop + 45;
-      doc.text(`Seg Height: ${order.seg_height || 'N/A'}`, 50);
+      doc.y = tableTop + 50;
       doc.moveDown(0.5);
 
       // Frame Section
@@ -81,7 +71,26 @@ function buildPDFContent(doc, order) {
       doc.text(`Frame SKU #: ${order.frame_sku || 'N/A'}`, 50);
       doc.text(`Frame Material: ${order.frame_material || 'N/A'}`, 50);
       doc.text(`Frame Name/Description: ${order.frame_name || 'N/A'}`, 50);
-      doc.text(`Formula Used: ${order.frame_formula || 'N/A'}`, 50);
+      doc.text(`Frame Price: $${(order.frame_price || 0).toFixed(2)}`, 50);
+
+      // Show insurance frame allowance if applicable
+      if ((order.frame_allowance && order.frame_allowance > 0) || (order.frame_discount_percent && order.frame_discount_percent > 0)) {
+        doc.moveDown(0.3);
+        doc.fontSize(9).fillColor('#666666');
+        doc.text('Insurance Frame Allowance:', 50);
+        doc.fontSize(10).fillColor('#000000');
+
+        if (order.frame_allowance && order.frame_allowance > 0) {
+          doc.text(`  Frame Allowance: -$${(order.frame_allowance || 0).toFixed(2)}`, 50);
+        }
+        if (order.frame_discount_percent && order.frame_discount_percent > 0) {
+          const afterAllowance = (order.frame_price || 0) - (order.frame_allowance || 0);
+          const discountAmount = afterAllowance * ((order.frame_discount_percent || 0) / 100);
+          doc.text(`  Discount: ${(order.frame_discount_percent || 0).toFixed(2)}% (-$${discountAmount.toFixed(2)})`, 50);
+        }
+        doc.text(`  Final Frame Price: $${(order.final_frame_price || 0).toFixed(2)}`, 50);
+      }
+
       doc.moveDown(0.5);
 
       // Lens Section - Dynamic with fallback to legacy fields
@@ -152,18 +161,18 @@ function buildPDFContent(doc, order) {
       drawSection(doc, 'Pricing');
       doc.fontSize(10);
 
-      // Add frame price first if it exists
-      if (order.frame_price && order.frame_price > 0) {
-        doc.text('Frame:', 50, doc.y);
-        doc.text(`$${(order.frame_price || 0).toFixed(2)}`, 480, doc.y - 12, { width: 70, align: 'right' });
+      // Add final frame price (after insurance) if it exists
+      if (order.final_frame_price && order.final_frame_price > 0) {
+        doc.text('Frame (after insurance):', 50, doc.y);
+        doc.text(`$${(order.final_frame_price || 0).toFixed(2)}`, 480, doc.y - 12, { width: 70, align: 'right' });
         doc.moveDown(0.3);
       }
 
       const pricingItems = [
         { label: 'Regular Price', value: order.regular_price },
+        { label: 'Insurance Copay', value: order.insurance_copay },
         { label: 'Sales Tax (2.25%)', value: order.sales_tax },
         { label: 'You Saved Today', value: order.you_saved },
-        { label: 'Insurance Copay', value: order.insurance_copay },
       ];
 
       pricingItems.forEach(item => {
@@ -179,9 +188,31 @@ function buildPDFContent(doc, order) {
 
       // Warranty
       if (order.warranty_type && order.warranty_type !== 'None') {
-        doc.text(`Warranty (${order.warranty_type}):`, 50, doc.y);
+        doc.text(`One Time Protection Warranty (${order.warranty_type}):`, 50, doc.y);
         doc.text(`$${(order.warranty_price || 0).toFixed(2)}`, 480, doc.y - 12, { width: 70, align: 'right' });
         doc.moveDown(0.5);
+
+        // Warranty Disclaimer - Replacement Copays
+        doc.fontSize(9).fillColor('#666666');
+        doc.text('If Warranty was Accepted - One Time Protection Fee then', 50, doc.y);
+        doc.moveDown(0.3);
+
+        // Draw copay table
+        const frameCopay = ((order.frame_price || 0) * 0.15).toFixed(2);
+        const lensCopay = ((order.total_lens_charges || 0) * 0.15).toFixed(2);
+
+        doc.fontSize(10).fillColor('#000000');
+        doc.rect(50, doc.y, 250, 20).stroke();
+        doc.rect(300, doc.y, 100, 20).stroke();
+        doc.text('Frame Copay', 55, doc.y + 5, { width: 240 });
+        doc.text(`$${frameCopay}`, 305, doc.y - 15, { width: 90, align: 'center' });
+        doc.moveDown(1.2);
+
+        doc.rect(50, doc.y, 250, 20).stroke();
+        doc.rect(300, doc.y, 100, 20).stroke();
+        doc.text('Lens Copay', 55, doc.y + 5, { width: 240 });
+        doc.text(`$${lensCopay}`, 305, doc.y - 15, { width: 90, align: 'center' });
+        doc.moveDown(1.5);
       }
 
       doc.font('Helvetica-Bold');

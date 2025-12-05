@@ -141,6 +141,89 @@ function runMigrations() {
       console.log('✅ Added other_charge_2_price column');
     }
 
+    // Migration 5: Add prism and base fields to prescription
+    const hasOdPrism = tableInfo.some(col => col.name === 'od_prism');
+    const hasOdBase = tableInfo.some(col => col.name === 'od_base');
+    const hasOsPrism = tableInfo.some(col => col.name === 'os_prism');
+    const hasOsBase = tableInfo.some(col => col.name === 'os_base');
+
+    if (!hasOdPrism) {
+      console.log('Migration 5a: Adding od_prism column...');
+      db.prepare(`ALTER TABLE orders ADD COLUMN od_prism TEXT`).run();
+      console.log('✅ Added od_prism column');
+    }
+
+    if (!hasOdBase) {
+      console.log('Migration 5b: Adding od_base column...');
+      db.prepare(`ALTER TABLE orders ADD COLUMN od_base TEXT`).run();
+      console.log('✅ Added od_base column');
+    }
+
+    if (!hasOsPrism) {
+      console.log('Migration 5c: Adding os_prism column...');
+      db.prepare(`ALTER TABLE orders ADD COLUMN os_prism TEXT`).run();
+      console.log('✅ Added os_prism column');
+    }
+
+    if (!hasOsBase) {
+      console.log('Migration 5d: Adding os_base column...');
+      db.prepare(`ALTER TABLE orders ADD COLUMN os_base TEXT`).run();
+      console.log('✅ Added os_base column');
+    }
+
+    // Migration 6: Add separate PD and Seg Height fields for OD and OS
+    const hasOdPd = tableInfo.some(col => col.name === 'od_pd');
+    const hasOsPd = tableInfo.some(col => col.name === 'os_pd');
+    const hasOdSegHeight = tableInfo.some(col => col.name === 'od_seg_height');
+    const hasOsSegHeight = tableInfo.some(col => col.name === 'os_seg_height');
+
+    if (!hasOdPd) {
+      console.log('Migration 6a: Adding od_pd column...');
+      db.prepare(`ALTER TABLE orders ADD COLUMN od_pd TEXT`).run();
+      console.log('✅ Added od_pd column');
+    }
+
+    if (!hasOsPd) {
+      console.log('Migration 6b: Adding os_pd column...');
+      db.prepare(`ALTER TABLE orders ADD COLUMN os_pd TEXT`).run();
+      console.log('✅ Added os_pd column');
+    }
+
+    if (!hasOdSegHeight) {
+      console.log('Migration 6c: Adding od_seg_height column...');
+      db.prepare(`ALTER TABLE orders ADD COLUMN od_seg_height TEXT`).run();
+      console.log('✅ Added od_seg_height column');
+    }
+
+    if (!hasOsSegHeight) {
+      console.log('Migration 6d: Adding os_seg_height column...');
+      db.prepare(`ALTER TABLE orders ADD COLUMN os_seg_height TEXT`).run();
+      console.log('✅ Added os_seg_height column');
+    }
+
+    // Migration 7: Add insurance frame allowance fields
+    const hasFrameAllowance = tableInfo.some(col => col.name === 'frame_allowance');
+    const hasFrameDiscountPercent = tableInfo.some(col => col.name === 'frame_discount_percent');
+    const hasFinalFramePrice = tableInfo.some(col => col.name === 'final_frame_price');
+
+    if (!hasFrameAllowance) {
+      console.log('Migration 7a: Adding frame_allowance column...');
+      db.prepare(`ALTER TABLE orders ADD COLUMN frame_allowance REAL DEFAULT 0`).run();
+      console.log('✅ Added frame_allowance column');
+    }
+
+    if (!hasFrameDiscountPercent) {
+      console.log('Migration 7b: Adding frame_discount_percent column...');
+      db.prepare(`ALTER TABLE orders ADD COLUMN frame_discount_percent REAL DEFAULT 0`).run();
+      console.log('✅ Added frame_discount_percent column');
+    }
+
+    if (!hasFinalFramePrice) {
+      console.log('Migration 7c: Adding final_frame_price column...');
+      db.prepare(`ALTER TABLE orders ADD COLUMN final_frame_price REAL DEFAULT 0`).run();
+      console.log('✅ Added final_frame_price column');
+    }
+
     console.log('✅ All migrations completed successfully');
   } catch (error) {
     console.error('Migration error:', error);
@@ -268,6 +351,14 @@ function initializeDatabase() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- Insurance Providers Table
+    CREATE TABLE IF NOT EXISTS insurance_providers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     -- Lens Categories Table (for dynamic lens category management)
     CREATE TABLE IF NOT EXISTS lens_categories (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -320,10 +411,14 @@ function initializeDatabase() {
       od_sphere TEXT,
       od_cylinder TEXT,
       od_axis TEXT,
+      od_prism TEXT,
+      od_base TEXT,
       od_add TEXT,
       os_sphere TEXT,
       os_cylinder TEXT,
       os_axis TEXT,
+      os_prism TEXT,
+      os_base TEXT,
       os_add TEXT,
       seg_height TEXT,
       
@@ -518,6 +613,13 @@ function insertDefaultOptions() {
   const doctors = ['Dr. Smith', 'Dr. Johnson', 'Dr. Williams'];
   for (const doctor of doctors) {
     insertDoctor.run(doctor);
+  }
+
+  // Insert default insurance providers
+  const insertInsurance = db.prepare('INSERT INTO insurance_providers (name) VALUES (?)');
+  const insuranceProviders = ['Blue Cross Blue Shield', 'UnitedHealthcare', 'Aetna', 'Cigna', 'Humana', 'VSP', 'EyeMed'];
+  for (const provider of insuranceProviders) {
+    insertInsurance.run(provider);
   }
 }
 

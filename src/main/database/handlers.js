@@ -78,6 +78,32 @@ function deleteDoctor(id) {
   stmt.run(id);
 }
 
+// ============ INSURANCE PROVIDERS ============
+
+function getInsuranceProviders() {
+  const db = getDatabase();
+  return db.prepare('SELECT * FROM insurance_providers WHERE is_active = 1 ORDER BY name').all();
+}
+
+function addInsuranceProvider(name) {
+  const db = getDatabase();
+  const stmt = db.prepare('INSERT INTO insurance_providers (name) VALUES (?)');
+  const result = stmt.run(name);
+  return result.lastInsertRowid;
+}
+
+function updateInsuranceProvider(id, name) {
+  const db = getDatabase();
+  const stmt = db.prepare('UPDATE insurance_providers SET name = ? WHERE id = ?');
+  stmt.run(name, id);
+}
+
+function deleteInsuranceProvider(id) {
+  const db = getDatabase();
+  const stmt = db.prepare('UPDATE insurance_providers SET is_active = 0 WHERE id = ?');
+  stmt.run(id);
+}
+
 // ============ FRAMES ============
 
 function getFrames() {
@@ -418,12 +444,18 @@ module.exports = {
   addDropdownOption,
   updateDropdownOption,
   deleteDropdownOption,
-  
+
   // Doctors
   getDoctors,
   addDoctor,
   updateDoctor,
   deleteDoctor,
+
+  // Insurance Providers
+  getInsuranceProviders,
+  addInsuranceProvider,
+  updateInsuranceProvider,
+  deleteInsuranceProvider,
 
   // Frames
   getFrames,

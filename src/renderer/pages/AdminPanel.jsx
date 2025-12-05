@@ -5,6 +5,7 @@ function AdminPanel() {
   const [activeTab, setActiveTab] = useState('dropdown');
   const [dropdownOptions, setDropdownOptions] = useState({});
   const [doctors, setDoctors] = useState([]);
+  const [insuranceProviders, setInsuranceProviders] = useState([]);
   const [frames, setFrames] = useState([]);
   const [lensCategories, setLensCategories] = useState([]);
 
@@ -12,12 +13,14 @@ function AdminPanel() {
   const [selectedCategory, setSelectedCategory] = useState('lens_design');
   const [editingOption, setEditingOption] = useState(null);
   const [editingDoctor, setEditingDoctor] = useState(null);
+  const [editingInsuranceProvider, setEditingInsuranceProvider] = useState(null);
   const [editingFrame, setEditingFrame] = useState(null);
   const [editingLensCategory, setEditingLensCategory] = useState(null);
 
   // New item forms
   const [newOption, setNewOption] = useState({ label: '', value: '', price: '', sort_order: '' });
   const [newDoctor, setNewDoctor] = useState('');
+  const [newInsuranceProvider, setNewInsuranceProvider] = useState('');
   const [newFrame, setNewFrame] = useState({ sku: '', name: '', material: '', description: '', price: '' });
   const [newLensCategory, setNewLensCategory] = useState({ category_key: '', display_label: '', sort_order: '' });
   const [categories, setCategories] = useState([]);
@@ -34,6 +37,7 @@ function AdminPanel() {
   const loadData = async () => {
     await loadDropdownOptions();
     await loadDoctors();
+    await loadInsuranceProviders();
     await loadFrames();
     await loadLensCategories();
     await buildCategoriesList();
@@ -84,6 +88,13 @@ function AdminPanel() {
     const result = await window.electronAPI.getDoctors();
     if (result.success) {
       setDoctors(result.data);
+    }
+  };
+
+  const loadInsuranceProviders = async () => {
+    const result = await window.electronAPI.getInsuranceProviders();
+    if (result.success) {
+      setInsuranceProviders(result.data);
     }
   };
 
@@ -171,6 +182,44 @@ function AdminPanel() {
       const result = await window.electronAPI.deleteDoctor(id);
       if (result.success) {
         loadDoctors();
+      } else {
+        alert(`Error: ${result.error}`);
+      }
+    }
+  };
+
+  // ============ INSURANCE PROVIDERS HANDLERS ============
+
+  const handleAddInsuranceProvider = async () => {
+    if (!newInsuranceProvider.trim()) {
+      alert('Please enter insurance provider name');
+      return;
+    }
+
+    const result = await window.electronAPI.addInsuranceProvider(newInsuranceProvider);
+    if (result.success) {
+      setNewInsuranceProvider('');
+      loadInsuranceProviders();
+    } else {
+      alert(`Error: ${result.error}`);
+    }
+  };
+
+  const handleUpdateInsuranceProvider = async (id, name) => {
+    const result = await window.electronAPI.updateInsuranceProvider(id, name);
+    if (result.success) {
+      setEditingInsuranceProvider(null);
+      loadInsuranceProviders();
+    } else {
+      alert(`Error: ${result.error}`);
+    }
+  };
+
+  const handleDeleteInsuranceProvider = async (id) => {
+    if (window.confirm('Are you sure you want to delete this insurance provider?')) {
+      const result = await window.electronAPI.deleteInsuranceProvider(id);
+      if (result.success) {
+        loadInsuranceProviders();
       } else {
         alert(`Error: ${result.error}`);
       }
@@ -354,6 +403,12 @@ function AdminPanel() {
           onClick={() => setActiveTab('doctors')}
         >
           Doctors
+        </button>
+        <button
+          className={`tab ${activeTab === 'insurance' ? 'active' : ''}`}
+          onClick={() => setActiveTab('insurance')}
+        >
+          Insurance Providers
         </button>
         <button
           className={`tab ${activeTab === 'frames' ? 'active' : ''}`}
@@ -695,6 +750,89 @@ function AdminPanel() {
                           </button>
                           <button
                             onClick={() => handleDeleteDoctor(doctor.id)}
+                            className="btn-small btn-danger"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Insurance Providers Tab */}
+      {activeTab === 'insurance' && (
+        <div className="tab-content">
+          <h3>Manage Insurance Providers</h3>
+
+          {/* Add New Insurance Provider Form */}
+          <div className="add-form">
+            <h4>Add New Insurance Provider</h4>
+            <div className="form-row">
+              <input
+                type="text"
+                placeholder="Insurance Provider Name (e.g., 'Blue Cross Blue Shield')"
+                value={newInsuranceProvider}
+                onChange={(e) => setNewInsuranceProvider(e.target.value)}
+              />
+              <button onClick={handleAddInsuranceProvider} className="btn btn-primary">Add Insurance Provider</button>
+            </div>
+          </div>
+
+          {/* Insurance Providers List */}
+          <div className="options-list">
+            <h4>Current Insurance Providers</h4>
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {insuranceProviders.map(provider => (
+                  <tr key={provider.id}>
+                    {editingInsuranceProvider?.id === provider.id ? (
+                      <>
+                        <td>
+                          <input
+                            type="text"
+                            value={editingInsuranceProvider.name}
+                            onChange={(e) => setEditingInsuranceProvider({ ...editingInsuranceProvider, name: e.target.value })}
+                          />
+                        </td>
+                        <td>
+                          <button
+                            onClick={() => handleUpdateInsuranceProvider(provider.id, editingInsuranceProvider.name)}
+                            className="btn-small btn-success"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => setEditingInsuranceProvider(null)}
+                            className="btn-small btn-secondary"
+                          >
+                            Cancel
+                          </button>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td>{provider.name}</td>
+                        <td>
+                          <button
+                            onClick={() => setEditingInsuranceProvider(provider)}
+                            className="btn-small btn-primary"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteInsuranceProvider(provider.id)}
                             className="btn-small btn-danger"
                           >
                             Delete

@@ -218,33 +218,24 @@ function generatePrintHTML(order) {
 
   <!-- Prescription -->
   <div class="section">
-    <div class="section-title">Prescription</div>
+    <div class="section-title">Prescription Details</div>
     <table class="prescription-grid">
       <tr>
         <th></th>
-        <th>Sphere</th>
-        <th>Cylinder</th>
-        <th>Axis</th>
-        <th>Add</th>
+        <th>OD (Right)</th>
+        <th>OS (Left)</th>
+      </tr>
+      <tr>
         <th>PD</th>
+        <td>${order.od_pd || ''}</td>
+        <td>${order.os_pd || ''}</td>
       </tr>
       <tr>
-        <th>OD</th>
-        <td>${order.od_sphere || ''}</td>
-        <td>${order.od_cylinder || ''}</td>
-        <td>${order.od_axis || ''}</td>
-        <td>${order.od_add || ''}</td>
-        <td rowspan="2">${order.pd || ''}</td>
-      </tr>
-      <tr>
-        <th>OS</th>
-        <td>${order.os_sphere || ''}</td>
-        <td>${order.os_cylinder || ''}</td>
-        <td>${order.os_axis || ''}</td>
-        <td>${order.os_add || ''}</td>
+        <th>Seg Height</th>
+        <td>${order.od_seg_height || ''}</td>
+        <td>${order.os_seg_height || ''}</td>
       </tr>
     </table>
-    ${order.seg_height ? `<div style="margin-top: 4px;"><strong>Seg Height:</strong> ${order.seg_height}</div>` : ''}
   </div>
 
   <!-- Frame Information -->
@@ -264,13 +255,32 @@ function generatePrintHTML(order) {
         <td>${order.frame_material || ''}</td>
       </tr>
       <tr>
-        <td><strong>Formula:</strong></td>
-        <td>${order.frame_formula || ''}</td>
-      </tr>
-      <tr>
-        <td><strong>Price:</strong></td>
+        <td><strong>Frame Price:</strong></td>
         <td>${formatCurrency(order.frame_price)}</td>
       </tr>
+      ${(order.frame_allowance > 0 || order.frame_discount_percent > 0) ? `
+      <tr>
+        <td colspan="2" style="padding-top: 10px;">
+          <strong style="color: #666;">Insurance Frame Allowance:</strong>
+        </td>
+      </tr>
+      ${order.frame_allowance > 0 ? `
+      <tr>
+        <td style="padding-left: 20px;"><strong>Allowance:</strong></td>
+        <td style="color: #dc3545;">-${formatCurrency(order.frame_allowance)}</td>
+      </tr>
+      ` : ''}
+      ${order.frame_discount_percent > 0 ? `
+      <tr>
+        <td style="padding-left: 20px;"><strong>Discount:</strong></td>
+        <td style="color: #dc3545;">${order.frame_discount_percent.toFixed(2)}% (-${formatCurrency(((order.frame_price || 0) - (order.frame_allowance || 0)) * ((order.frame_discount_percent || 0) / 100))})</td>
+      </tr>
+      ` : ''}
+      <tr>
+        <td style="padding-left: 20px;"><strong>Final Frame Price:</strong></td>
+        <td><strong>${formatCurrency(order.final_frame_price)}</strong></td>
+      </tr>
+      ` : ''}
     </table>
   </div>
 
@@ -292,20 +302,43 @@ function generatePrintHTML(order) {
         <td style="width: 70%;"><strong>Regular Price:</strong></td>
         <td style="text-align: right;">${formatCurrency(order.regular_price)}</td>
       </tr>
-      <tr>
-        <td><strong>Sales Tax (2.25%):</strong></td>
-        <td style="text-align: right;">${formatCurrency(order.sales_tax)}</td>
-      </tr>
       ${order.insurance_copay > 0 ? `
       <tr>
         <td><strong>Insurance Copay:</strong></td>
         <td style="text-align: right;">-${formatCurrency(order.insurance_copay)}</td>
       </tr>
       ` : ''}
+      <tr>
+        <td><strong>Sales Tax (2.25%):</strong></td>
+        <td style="text-align: right;">${formatCurrency(order.sales_tax)}</td>
+      </tr>
+      ${order.you_saved > 0 ? `
+      <tr>
+        <td><strong>You Saved Today:</strong></td>
+        <td style="text-align: right; color: #28a745; font-weight: 600;">${formatCurrency(order.you_saved)}</td>
+      </tr>
+      ` : ''}
       ${order.warranty_type && order.warranty_type !== 'None' ? `
       <tr>
-        <td><strong>Warranty (${order.warranty_type}):</strong></td>
+        <td><strong>One Time Protection Warranty (${order.warranty_type}):</strong></td>
         <td style="text-align: right;">${formatCurrency(order.warranty_price)}</td>
+      </tr>
+      <tr>
+        <td colspan="2" style="padding: 10px; background-color: #f8f9fa;">
+          <div style="text-align: center; font-weight: 600; color: #495057; border-bottom: 1px solid #dee2e6; padding-bottom: 5px; margin-bottom: 5px;">
+            If Warranty was Accepted - One Time Protection Fee then
+          </div>
+          <table style="width: 100%; border-collapse: collapse; margin-top: 5px;">
+            <tr>
+              <td style="border: 1px solid #333; padding: 5px; text-align: center; font-weight: 500;">Frame Copay</td>
+              <td style="border: 1px solid #333; padding: 5px; text-align: center; font-weight: 600;">${formatCurrency((order.frame_price || 0) * 0.15)}</td>
+            </tr>
+            <tr>
+              <td style="border: 1px solid #333; padding: 5px; text-align: center; font-weight: 500;">Lens Copay</td>
+              <td style="border: 1px solid #333; padding: 5px; text-align: center; font-weight: 600;">${formatCurrency((order.total_lens_charges || 0) * 0.15)}</td>
+            </tr>
+          </table>
+        </td>
       </tr>
       ` : ''}
       <tr style="background-color: #f0f0f0; font-weight: bold; font-size: 11pt;">

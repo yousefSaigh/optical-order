@@ -3,6 +3,7 @@ import '../styles/OrderForm.css';
 
 function OrderForm() {
   const [doctors, setDoctors] = useState([]);
+  const [insuranceProviders, setInsuranceProviders] = useState([]);
   const [dropdownOptions, setDropdownOptions] = useState({});
   const [frames, setFrames] = useState([]);
   const [lensCategories, setLensCategories] = useState([]);
@@ -19,16 +20,22 @@ function OrderForm() {
     sold_by: '',
     
     // Prescription Details
-    pd: '',
+    od_pd: '',
+    os_pd: '',
+    od_seg_height: '',
+    os_seg_height: '',
     od_sphere: '',
     od_cylinder: '',
     od_axis: '',
+    od_prism: '',
+    od_base: '',
     od_add: '',
     os_sphere: '',
     os_cylinder: '',
     os_axis: '',
+    os_prism: '',
+    os_base: '',
     os_add: '',
-    seg_height: '',
     
     // Frame Information
     frame_sku: '',
@@ -36,6 +43,9 @@ function OrderForm() {
     frame_name: '',
     frame_formula: '',
     frame_price: 0,
+    frame_allowance: 0,
+    frame_discount_percent: 0,
+    final_frame_price: 0,
     
     // Lens Information
     lens_design: '',
@@ -90,10 +100,31 @@ function OrderForm() {
   // Load initial data
   useEffect(() => {
     loadDoctors();
+    loadInsuranceProviders();
     loadDropdownOptions();
     loadFrames();
     loadLensCategories();
   }, []);
+
+  // Calculate final frame price when frame price, allowance, or discount changes
+  useEffect(() => {
+    const framePrice = parseFloat(formData.frame_price) || 0;
+    const allowance = parseFloat(formData.frame_allowance) || 0;
+    const discountPercent = parseFloat(formData.frame_discount_percent) || 0;
+
+    // Formula: Frame Price - Allowance - (Remaining Amount × Discount%) = Final Frame Price
+    const afterAllowance = framePrice - allowance;
+    const discountAmount = afterAllowance * (discountPercent / 100);
+    const finalFramePrice = parseFloat((afterAllowance - discountAmount).toFixed(2));
+
+    // Update final_frame_price if it changed
+    if (formData.final_frame_price !== finalFramePrice) {
+      setFormData(prev => ({
+        ...prev,
+        final_frame_price: finalFramePrice
+      }));
+    }
+  }, [formData.frame_price, formData.frame_allowance, formData.frame_discount_percent]);
 
   // Recalculate prices whenever relevant fields change
   useEffect(() => {
@@ -110,6 +141,7 @@ function OrderForm() {
     formData.prism_price,
     formData.other_option_price,
     formData.frame_price,
+    formData.final_frame_price,
     formData.warranty_price,
     formData.insurance_copay,
     formData.other_charges_adjustment,
@@ -124,6 +156,13 @@ function OrderForm() {
     const result = await window.electronAPI.getDoctors();
     if (result.success) {
       setDoctors(result.data);
+    }
+  };
+
+  const loadInsuranceProviders = async () => {
+    const result = await window.electronAPI.getInsuranceProviders();
+    if (result.success) {
+      setInsuranceProviders(result.data);
     }
   };
 
@@ -267,14 +306,21 @@ function OrderForm() {
     // Use whichever is greater (handles both new and legacy data)
     totalLensCharges = Math.max(totalLensCharges, legacyLensTotal);
 
-    // Calculate regular price (frame + lenses) - round to 2 decimals
-    const regularPrice = parseFloat(((parseFloat(formData.frame_price) || 0) + totalLensCharges).toFixed(2));
+    // Calculate regular price (final frame price after insurance + lenses) - round to 2 decimals
+    const regularPrice = parseFloat(((parseFloat(formData.final_frame_price) || 0) + totalLensCharges).toFixed(2));
 
-    // Calculate sales tax (2.25%) - round to 2 decimals
-    const salesTax = parseFloat((regularPrice * 0.0225).toFixed(2));
+    // Auto-calculate "You Saved Today" from insurance frame savings
+    const youSaved = parseFloat(((parseFloat(formData.frame_price) || 0) - (parseFloat(formData.final_frame_price) || 0)).toFixed(2));
 
-    // Calculate you pay (regular price + tax - insurance copay + other charges) - round to 2 decimals
-    const youPay = parseFloat((regularPrice + salesTax - (parseFloat(formData.insurance_copay) || 0) + (parseFloat(formData.other_charges_adjustment) || 0)).toFixed(2));
+    // Subtract insurance copay first
+    const insuranceCopay = parseFloat(formData.insurance_copay) || 0;
+    const afterCopay = parseFloat((regularPrice - insuranceCopay).toFixed(2));
+
+    // Calculate sales tax (2.25%) on amount AFTER insurance copay - round to 2 decimals
+    const salesTax = parseFloat((afterCopay * 0.0225).toFixed(2));
+
+    // Calculate you pay (after copay + tax + other charges) - round to 2 decimals
+    const youPay = parseFloat((afterCopay + salesTax + (parseFloat(formData.other_charges_adjustment) || 0)).toFixed(2));
 
     // Calculate final price (you pay + warranty) - round to 2 decimals
     const finalPrice = parseFloat((youPay + (parseFloat(formData.warranty_price) || 0)).toFixed(2));
@@ -305,6 +351,7 @@ function OrderForm() {
       ...prev,
       total_lens_charges: parseFloat(totalLensCharges.toFixed(2)),
       regular_price: regularPrice,
+      you_saved: youSaved,
       sales_tax: salesTax,
       you_pay: youPay,
       final_price: finalPrice,
@@ -393,12 +440,16 @@ function OrderForm() {
             
             <div className="form-group">
               <label>Insurance</label>
-              <input
-                type="text"
+              <select
                 name="insurance"
                 value={formData.insurance}
                 onChange={handleInputChange}
-              />
+              >
+                <option value="">Select Insurance Provider</option>
+                {insuranceProviders.map(provider => (
+                  <option key={provider.id} value={provider.name}>{provider.name}</option>
+                ))}
+              </select>
             </div>
             
             <div className="form-group">
@@ -417,118 +468,61 @@ function OrderForm() {
         {/* Prescription Details Section */}
         <section className="form-section">
           <h3>Prescription Details</h3>
-          <div className="form-group">
-            <label>PD (Pupillary Distance)</label>
-            <input
-              type="text"
-              name="pd"
-              value={formData.pd}
-              onChange={handleInputChange}
-            />
-          </div>
 
           <div className="prescription-table">
             <table>
               <thead>
                 <tr>
                   <th></th>
-                  <th>Sphere</th>
-                  <th>Cylinder</th>
-                  <th>Axis</th>
-                  <th>Add</th>
+                  <th>OD (Right)</th>
+                  <th>OS (Left)</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td><strong>OD (Right)</strong></td>
+                  <td><strong>PD</strong></td>
                   <td>
                     <input
                       type="text"
-                      name="od_sphere"
-                      value={formData.od_sphere}
+                      name="od_pd"
+                      value={formData.od_pd}
                       onChange={handleInputChange}
-                      placeholder="e.g., +2.00"
+                      placeholder="e.g., 32"
                     />
                   </td>
                   <td>
                     <input
                       type="text"
-                      name="od_cylinder"
-                      value={formData.od_cylinder}
+                      name="os_pd"
+                      value={formData.os_pd}
                       onChange={handleInputChange}
-                      placeholder="e.g., -1.00"
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="text"
-                      name="od_axis"
-                      value={formData.od_axis}
-                      onChange={handleInputChange}
-                      placeholder="e.g., 90"
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="text"
-                      name="od_add"
-                      value={formData.od_add}
-                      onChange={handleInputChange}
-                      placeholder="e.g., +2.00"
+                      placeholder="e.g., 31"
                     />
                   </td>
                 </tr>
                 <tr>
-                  <td><strong>OS (Left)</strong></td>
+                  <td><strong>Seg Height</strong></td>
                   <td>
                     <input
                       type="text"
-                      name="os_sphere"
-                      value={formData.os_sphere}
+                      name="od_seg_height"
+                      value={formData.od_seg_height}
                       onChange={handleInputChange}
-                      placeholder="e.g., +2.00"
+                      placeholder="e.g., 18mm"
                     />
                   </td>
                   <td>
                     <input
                       type="text"
-                      name="os_cylinder"
-                      value={formData.os_cylinder}
+                      name="os_seg_height"
+                      value={formData.os_seg_height}
                       onChange={handleInputChange}
-                      placeholder="e.g., -1.00"
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="text"
-                      name="os_axis"
-                      value={formData.os_axis}
-                      onChange={handleInputChange}
-                      placeholder="e.g., 90"
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="text"
-                      name="os_add"
-                      value={formData.os_add}
-                      onChange={handleInputChange}
-                      placeholder="e.g., +2.00"
+                      placeholder="e.g., 18mm"
                     />
                   </td>
                 </tr>
               </tbody>
             </table>
-          </div>
-
-          <div className="form-group">
-            <label>Seg Height</label>
-            <input
-              type="text"
-              name="seg_height"
-              value={formData.seg_height}
-              onChange={handleInputChange}
-            />
           </div>
         </section>
 
@@ -572,18 +566,6 @@ function OrderForm() {
             </div>
 
             <div className="form-group">
-              <label>Formula Used (Format: 100-100-100)</label>
-              <input
-                type="text"
-                name="frame_formula"
-                value={formData.frame_formula}
-                onChange={handleFormulaChange}
-                placeholder="100-100-100"
-                pattern="\d{2,3}-\d{2,3}-\d{2,3}"
-              />
-            </div>
-
-            <div className="form-group">
               <label>Frame Price</label>
               <input
                 type="number"
@@ -594,6 +576,80 @@ function OrderForm() {
                 min="0"
               />
             </div>
+          </div>
+
+          {/* Insurance Frame Allowance Section */}
+          <div className="insurance-frame-section">
+            <h4>Insurance Frame Allowance</h4>
+            <div className="form-grid">
+              <div className="form-group">
+                <label>Frame Allowance ($)</label>
+                <input
+                  type="number"
+                  name="frame_allowance"
+                  value={formData.frame_allowance}
+                  onChange={handleInputChange}
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  disabled={!formData.frame_price || formData.frame_price === 0}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Discount (%)</label>
+                <input
+                  type="number"
+                  name="frame_discount_percent"
+                  value={formData.frame_discount_percent}
+                  onChange={handleInputChange}
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  placeholder="0.00"
+                  disabled={!formData.frame_price || formData.frame_price === 0}
+                />
+              </div>
+            </div>
+
+            {/* Frame Price Summary */}
+            {formData.frame_price > 0 && (
+              <div className="frame-price-summary">
+                <h5>Frame Price Breakdown</h5>
+                <div className="summary-row">
+                  <span>Original Frame Price:</span>
+                  <span className="price">${parseFloat(formData.frame_price || 0).toFixed(2)}</span>
+                </div>
+                {(formData.frame_allowance > 0 || formData.frame_discount_percent > 0) && (
+                  <>
+                    {formData.frame_allowance > 0 && (
+                      <div className="summary-row discount">
+                        <span>Insurance Allowance:</span>
+                        <span className="price">-${parseFloat(formData.frame_allowance || 0).toFixed(2)}</span>
+                      </div>
+                    )}
+                    {formData.frame_discount_percent > 0 && (
+                      <div className="summary-row discount">
+                        <span>Insurance Discount ({formData.frame_discount_percent}%):</span>
+                        <span className="price">
+                          -${(((parseFloat(formData.frame_price || 0) - parseFloat(formData.frame_allowance || 0)) * (parseFloat(formData.frame_discount_percent || 0) / 100))).toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                    <div className="summary-row savings">
+                      <span>You Saved:</span>
+                      <span className="price">
+                        ${((parseFloat(formData.frame_price || 0) - parseFloat(formData.final_frame_price || 0))).toFixed(2)}
+                      </span>
+                    </div>
+                  </>
+                )}
+                <div className="summary-row total">
+                  <span><strong>Final Frame Price:</strong></span>
+                  <span className="price"><strong>${parseFloat(formData.final_frame_price || 0).toFixed(2)}</strong></span>
+                </div>
+              </div>
+            )}
           </div>
         </section>
 
@@ -637,22 +693,6 @@ function OrderForm() {
               <span className="price">${formData.regular_price.toFixed(2)}</span>
             </div>
             <div className="pricing-row">
-              <span>Sales Tax (2.25%):</span>
-              <span className="price">${formData.sales_tax.toFixed(2)}</span>
-            </div>
-            <div className="pricing-row">
-              <span>You Saved Today:</span>
-              <input
-                type="number"
-                name="you_saved"
-                value={formData.you_saved}
-                onChange={handleInputChange}
-                step="0.01"
-                min="0"
-                className="price-input"
-              />
-            </div>
-            <div className="pricing-row">
               <span>Insurance Copay:</span>
               <input
                 type="number"
@@ -664,13 +704,21 @@ function OrderForm() {
                 className="price-input"
               />
             </div>
+            <div className="pricing-row">
+              <span>Sales Tax (2.25%):</span>
+              <span className="price">${formData.sales_tax.toFixed(2)}</span>
+            </div>
+            <div className="pricing-row">
+              <span>You Saved Today:</span>
+              <span className="price">${formData.you_saved.toFixed(2)}</span>
+            </div>
             <div className="pricing-row total">
               <span><strong>You Pay:</strong></span>
               <span className="price"><strong>${formData.you_pay.toFixed(2)}</strong></span>
             </div>
 
             <div className="warranty-section">
-              <label>Warranty Option:</label>
+              <label>One Time Protection Warranty:</label>
               <select
                 name="warranty_type"
                 value={formData.warranty_type}
@@ -679,12 +727,31 @@ function OrderForm() {
                 <option value="">Select Warranty</option>
                 {dropdownOptions.warranty?.map(option => (
                   <option key={option.id} value={option.value}>
-                    {option.label} - ${parseFloat(option.price).toFixed(2)}
+                    {option.label}- {option.value} - ${parseFloat(option.price).toFixed(2)}
                   </option>
                 ))}
               </select>
               {formData.warranty_price > 0 && (
                 <span className="price-display">Price: ${formData.warranty_price.toFixed(2)}</span>
+              )}
+
+              {/* Warranty Disclaimer - Only show when warranty is selected */}
+              {formData.warranty_type && formData.warranty_type !== 'None' && formData.warranty_type !== '' && (
+                <div className="warranty-disclaimer">
+                  <div className="disclaimer-header">If Warranty was Accepted - One Time Protection Fee at the time of replacement</div>
+                  <table className="copay-table">
+                    <tbody>
+                      <tr>
+                        <td className="copay-label">Frame Copay</td>
+                        <td className="copay-amount">${((parseFloat(formData.frame_price) || 0) * 0.15).toFixed(2)}</td>
+                      </tr>
+                      <tr>
+                        <td className="copay-label">Lens Copay</td>
+                        <td className="copay-amount">${((parseFloat(formData.total_lens_charges) || 0) * 0.15).toFixed(2)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
 

@@ -165,6 +165,50 @@
   cursor: pointer;
 }
 
+/* Warranty Disclaimer */
+.warranty-disclaimer {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background-color: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+}
+
+.warranty-disclaimer .disclaimer-header {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #495057;
+  margin-bottom: 0.5rem;
+  text-align: center;
+  border-bottom: 1px solid #dee2e6;
+  padding-bottom: 0.5rem;
+}
+
+.copay-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.5rem;
+}
+
+.copay-table td {
+  padding: 0.5rem;
+  border: 1px solid #333;
+  text-align: center;
+}
+
+.copay-table .copay-label {
+  font-weight: 500;
+  background-color: #ffffff;
+  width: 60%;
+}
+
+.copay-table .copay-amount {
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+  background-color: #ffffff;
+  width: 40%;
+}
+
 /* Form Actions */
 .form-actions {
   display: flex;
@@ -336,6 +380,69 @@
   outline: 1px solid #3498db;
   background-color: white;
   border-radius: 3px;
+}
+
+/* Insurance Frame Allowance Section */
+.insurance-frame-section {
+  margin-top: 1rem;
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+}
+
+.insurance-frame-section h4 {
+  color: #495057;
+  margin-bottom: 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.insurance-frame-section h5 {
+  color: #6c757d;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.frame-price-summary {
+  margin-top: 1rem;
+  padding: 1rem;
+  background-color: #ffffff;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+}
+
+.frame-price-summary .summary-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.frame-price-summary .summary-row:last-child {
+  border-bottom: none;
+}
+
+.frame-price-summary .summary-row.discount {
+  color: #dc3545;
+}
+
+.frame-price-summary .summary-row.savings {
+  color: #28a745;
+  font-weight: 600;
+}
+
+.frame-price-summary .summary-row.total {
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 2px solid #333;
+  font-size: 1.1rem;
+}
+
+.frame-price-summary .price {
+  font-family: 'Courier New', monospace;
+  font-weight: 500;
 }
 
 @media print {

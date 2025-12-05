@@ -235,34 +235,25 @@ function OrderHistory() {
 
               {/* Prescription */}
               <section className="detail-section">
-                <h4>Prescription</h4>
-                <div className="detail-grid">
-                  <div><strong>PD:</strong> {selectedOrder.pd || 'N/A'}</div>
-                </div>
+                <h4>Prescription Details</h4>
                 <table className="prescription-table">
                   <thead>
                     <tr>
                       <th></th>
-                      <th>Sphere</th>
-                      <th>Cylinder</th>
-                      <th>Axis</th>
-                      <th>Add</th>
+                      <th>OD (Right)</th>
+                      <th>OS (Left)</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr>
-                      <td><strong>OD</strong></td>
-                      <td>{selectedOrder.od_sphere || '-'}</td>
-                      <td>{selectedOrder.od_cylinder || '-'}</td>
-                      <td>{selectedOrder.od_axis || '-'}</td>
-                      <td>{selectedOrder.od_add || '-'}</td>
+                      <td><strong>PD</strong></td>
+                      <td>{selectedOrder.od_pd || '-'}</td>
+                      <td>{selectedOrder.os_pd || '-'}</td>
                     </tr>
                     <tr>
-                      <td><strong>OS</strong></td>
-                      <td>{selectedOrder.os_sphere || '-'}</td>
-                      <td>{selectedOrder.os_cylinder || '-'}</td>
-                      <td>{selectedOrder.os_axis || '-'}</td>
-                      <td>{selectedOrder.os_add || '-'}</td>
+                      <td><strong>Seg Height</strong></td>
+                      <td>{selectedOrder.od_seg_height || '-'}</td>
+                      <td>{selectedOrder.os_seg_height || '-'}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -275,8 +266,32 @@ function OrderHistory() {
                   <div><strong>SKU:</strong> {selectedOrder.frame_sku || 'N/A'}</div>
                   <div><strong>Material:</strong> {selectedOrder.frame_material || 'N/A'}</div>
                   <div><strong>Name:</strong> {selectedOrder.frame_name || 'N/A'}</div>
-                  <div><strong>Formula:</strong> {selectedOrder.frame_formula || 'N/A'}</div>
+                  <div><strong>Frame Price:</strong> ${(selectedOrder.frame_price || 0).toFixed(2)}</div>
                 </div>
+
+                {/* Insurance Frame Allowance */}
+                {((selectedOrder.frame_allowance && selectedOrder.frame_allowance > 0) ||
+                  (selectedOrder.frame_discount_percent && selectedOrder.frame_discount_percent > 0)) && (
+                  <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
+                    <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>
+                      <strong>Insurance Frame Allowance:</strong>
+                    </div>
+                    {selectedOrder.frame_allowance > 0 && (
+                      <div style={{ paddingLeft: '1rem', color: '#dc3545' }}>
+                        Allowance: -${(selectedOrder.frame_allowance || 0).toFixed(2)}
+                      </div>
+                    )}
+                    {selectedOrder.frame_discount_percent > 0 && (
+                      <div style={{ paddingLeft: '1rem', color: '#dc3545' }}>
+                        Discount: {(selectedOrder.frame_discount_percent || 0).toFixed(2)}%
+                        (-${(((selectedOrder.frame_price || 0) - (selectedOrder.frame_allowance || 0)) * ((selectedOrder.frame_discount_percent || 0) / 100)).toFixed(2)})
+                      </div>
+                    )}
+                    <div style={{ paddingLeft: '1rem', marginTop: '0.5rem', fontWeight: 'bold' }}>
+                      Final Frame Price: ${(selectedOrder.final_frame_price || 0).toFixed(2)}
+                    </div>
+                  </div>
+                )}
               </section>
 
               {/* Lenses - Dynamic */}
@@ -302,18 +317,43 @@ function OrderHistory() {
                     <span>{formatCurrency(selectedOrder.regular_price)}</span>
                   </div>
                   <div className="pricing-row">
-                    <span>Sales Tax:</span>
-                    <span>{formatCurrency(selectedOrder.sales_tax)}</span>
-                  </div>
-                  <div className="pricing-row">
                     <span>Insurance Copay:</span>
                     <span>-{formatCurrency(selectedOrder.insurance_copay)}</span>
                   </div>
-                  {selectedOrder.warranty_type && selectedOrder.warranty_type !== 'None' && (
-                    <div className="pricing-row">
-                      <span>Warranty ({selectedOrder.warranty_type}):</span>
-                      <span>{formatCurrency(selectedOrder.warranty_price)}</span>
+                  <div className="pricing-row">
+                    <span>Sales Tax:</span>
+                    <span>{formatCurrency(selectedOrder.sales_tax)}</span>
+                  </div>
+                  {selectedOrder.you_saved > 0 && (
+                    <div className="pricing-row" style={{ color: '#28a745', fontWeight: '600' }}>
+                      <span>You Saved Today:</span>
+                      <span>{formatCurrency(selectedOrder.you_saved)}</span>
                     </div>
+                  )}
+                  {selectedOrder.warranty_type && selectedOrder.warranty_type !== 'None' && (
+                    <>
+                      <div className="pricing-row">
+                        <span>One Time Protection Warranty ({selectedOrder.warranty_type}):</span>
+                        <span>{formatCurrency(selectedOrder.warranty_price)}</span>
+                      </div>
+                      <div style={{ marginTop: '0.75rem', padding: '0.75rem', backgroundColor: '#f8f9fa', borderRadius: '4px', border: '1px solid #dee2e6' }}>
+                        <div style={{ fontSize: '0.9rem', fontWeight: '600', color: '#495057', textAlign: 'center', borderBottom: '1px solid #dee2e6', paddingBottom: '0.5rem', marginBottom: '0.5rem' }}>
+                          If Warranty was Accepted - One Time Protection Fee then
+                        </div>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '0.5rem' }}>
+                          <tbody>
+                            <tr>
+                              <td style={{ padding: '0.5rem', border: '1px solid #333', textAlign: 'center', fontWeight: '500' }}>Frame Copay</td>
+                              <td style={{ padding: '0.5rem', border: '1px solid #333', textAlign: 'center', fontWeight: '600' }}>{formatCurrency((selectedOrder.frame_price || 0) * 0.15)}</td>
+                            </tr>
+                            <tr>
+                              <td style={{ padding: '0.5rem', border: '1px solid #333', textAlign: 'center', fontWeight: '500' }}>Lens Copay</td>
+                              <td style={{ padding: '0.5rem', border: '1px solid #333', textAlign: 'center', fontWeight: '600' }}>{formatCurrency((selectedOrder.total_lens_charges || 0) * 0.15)}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
                   )}
                   <div className="pricing-row total">
                     <strong>Final Price:</strong>
