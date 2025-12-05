@@ -361,11 +361,27 @@ function OrderForm() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     const result = await window.electronAPI.createOrder(formData);
-    
+
     if (result.success) {
-      alert(`Order created successfully! Order Number: ${result.data.order_number}`);
+      const orderNumber = result.data.order_number;
+      const orderId = result.data.id;
+
+      // Show success message for order creation
+      let successMessage = `Order created successfully! Order Number: ${orderNumber}`;
+
+      // Automatically generate and save PDF
+      const pdfResult = await window.electronAPI.generatePDF(orderId, null);
+
+      if (pdfResult.success) {
+        successMessage += `\n\nPDF saved to: ${pdfResult.data.path}`;
+      } else {
+        successMessage += `\n\nWarning: Order saved but PDF generation failed: ${pdfResult.error}`;
+      }
+
+      alert(successMessage);
+
       // Reset form
       window.location.reload();
     } else {
