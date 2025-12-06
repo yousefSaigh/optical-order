@@ -22,13 +22,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateInsuranceProvider: (id, name) => ipcRenderer.invoke('update-insurance-provider', id, name),
   deleteInsuranceProvider: (id) => ipcRenderer.invoke('delete-insurance-provider', id),
 
-  // Frames
-  getFrames: () => ipcRenderer.invoke('get-frames'),
-  getFrameBySku: (sku) => ipcRenderer.invoke('get-frame-by-sku', sku),
-  addFrame: (frame) => ipcRenderer.invoke('add-frame', frame),
-  updateFrame: (id, frame) => ipcRenderer.invoke('update-frame', id, frame),
-  deleteFrame: (id) => ipcRenderer.invoke('delete-frame', id),
-
   // Lens Categories
   getLensCategories: () => ipcRenderer.invoke('get-lens-categories'),
   getActiveLensCategories: () => ipcRenderer.invoke('get-active-lens-categories'),

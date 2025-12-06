@@ -104,50 +104,6 @@ function deleteInsuranceProvider(id) {
   stmt.run(id);
 }
 
-// ============ FRAMES ============
-
-function getFrames() {
-  const db = getDatabase();
-  return db.prepare('SELECT * FROM frames WHERE is_active = 1 ORDER BY name').all();
-}
-
-function getFrameBySku(sku) {
-  const db = getDatabase();
-  return db.prepare('SELECT * FROM frames WHERE sku = ? AND is_active = 1').get(sku);
-}
-
-function addFrame(frame) {
-  const db = getDatabase();
-  const stmt = db.prepare(`
-    INSERT INTO frames (sku, name, material, description, price)
-    VALUES (?, ?, ?, ?, ?)
-  `);
-  const result = stmt.run(
-    frame.sku,
-    frame.name,
-    frame.material || '',
-    frame.description || '',
-    frame.price || 0
-  );
-  return result.lastInsertRowid;
-}
-
-function updateFrame(id, frame) {
-  const db = getDatabase();
-  const stmt = db.prepare(`
-    UPDATE frames 
-    SET sku = ?, name = ?, material = ?, description = ?, price = ?, updated_at = CURRENT_TIMESTAMP
-    WHERE id = ?
-  `);
-  stmt.run(frame.sku, frame.name, frame.material, frame.description, frame.price, id);
-}
-
-function deleteFrame(id) {
-  const db = getDatabase();
-  const stmt = db.prepare('UPDATE frames SET is_active = 0 WHERE id = ?');
-  stmt.run(id);
-}
-
 // ============ LENS CATEGORIES ============
 
 function getLensCategories() {
@@ -246,7 +202,6 @@ function createOrder(orderData) {
   const stmt = db.prepare(`
     INSERT INTO orders (
       order_number, patient_name, order_date, doctor_id, account_number, insurance, sold_by,
-      pd, od_sphere, od_cylinder, od_axis, od_add, os_sphere, os_cylinder, os_axis, os_add, seg_height,
       od_pd, os_pd, od_seg_height, os_seg_height,
       frame_sku, frame_material, frame_name, frame_formula, frame_price,
       frame_allowance, frame_discount_percent, final_frame_price,
@@ -264,7 +219,6 @@ function createOrder(orderData) {
       payment_today, balance_due, special_notes, verified_by, status
     ) VALUES (
       ?, ?, ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?,
       ?, ?, ?, ?, ?,
       ?, ?, ?,
@@ -291,16 +245,6 @@ function createOrder(orderData) {
     orderData.account_number || '',
     orderData.insurance || '',
     orderData.sold_by || '',
-    orderData.pd || '',
-    orderData.od_sphere || '',
-    orderData.od_cylinder || '',
-    orderData.od_axis || '',
-    orderData.od_add || '',
-    orderData.os_sphere || '',
-    orderData.os_cylinder || '',
-    orderData.os_axis || '',
-    orderData.os_add || '',
-    orderData.seg_height || '',
     orderData.od_pd || '',
     orderData.os_pd || '',
     orderData.od_seg_height || '',
@@ -405,8 +349,6 @@ function updateOrder(id, orderData) {
   const stmt = db.prepare(`
     UPDATE orders SET
       patient_name = ?, order_date = ?, doctor_id = ?, account_number = ?, insurance = ?, sold_by = ?,
-      pd = ?, od_sphere = ?, od_cylinder = ?, od_axis = ?, od_add = ?,
-      os_sphere = ?, os_cylinder = ?, os_axis = ?, os_add = ?, seg_height = ?,
       od_pd = ?, os_pd = ?, od_seg_height = ?, os_seg_height = ?,
       frame_sku = ?, frame_material = ?, frame_name = ?, frame_formula = ?, frame_price = ?,
       frame_allowance = ?, frame_discount_percent = ?, final_frame_price = ?,
@@ -426,9 +368,7 @@ function updateOrder(id, orderData) {
   
   stmt.run(
     orderData.patient_name, orderData.order_date, orderData.doctor_id, orderData.account_number,
-    orderData.insurance, orderData.sold_by, orderData.pd, orderData.od_sphere, orderData.od_cylinder,
-    orderData.od_axis, orderData.od_add, orderData.os_sphere, orderData.os_cylinder, orderData.os_axis,
-    orderData.os_add, orderData.seg_height,
+    orderData.insurance, orderData.sold_by,
     orderData.od_pd, orderData.os_pd, orderData.od_seg_height, orderData.os_seg_height,
     orderData.frame_sku, orderData.frame_material,
     orderData.frame_name, orderData.frame_formula, orderData.frame_price,
@@ -473,13 +413,6 @@ module.exports = {
   addInsuranceProvider,
   updateInsuranceProvider,
   deleteInsuranceProvider,
-
-  // Frames
-  getFrames,
-  getFrameBySku,
-  addFrame,
-  updateFrame,
-  deleteFrame,
 
   // Lens Categories
   getLensCategories,

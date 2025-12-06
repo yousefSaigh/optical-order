@@ -173,50 +173,6 @@ function registerIPCHandlers() {
     }
   });
 
-  // Frames
-  ipcMain.handle('get-frames', async () => {
-    try {
-      return { success: true, data: dbHandlers.getFrames() };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  });
-
-  ipcMain.handle('get-frame-by-sku', async (event, sku) => {
-    try {
-      return { success: true, data: dbHandlers.getFrameBySku(sku) };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  });
-
-  ipcMain.handle('add-frame', async (event, frame) => {
-    try {
-      const id = dbHandlers.addFrame(frame);
-      return { success: true, data: { id } };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  });
-
-  ipcMain.handle('update-frame', async (event, id, frame) => {
-    try {
-      dbHandlers.updateFrame(id, frame);
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  });
-
-  ipcMain.handle('delete-frame', async (event, id) => {
-    try {
-      dbHandlers.deleteFrame(id);
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  });
-
   // Lens Categories
   ipcMain.handle('get-lens-categories', async () => {
     try {

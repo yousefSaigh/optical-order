@@ -141,36 +141,6 @@ function runMigrations() {
       console.log('✅ Added other_charge_2_price column');
     }
 
-    // Migration 5: Add prism and base fields to prescription
-    const hasOdPrism = tableInfo.some(col => col.name === 'od_prism');
-    const hasOdBase = tableInfo.some(col => col.name === 'od_base');
-    const hasOsPrism = tableInfo.some(col => col.name === 'os_prism');
-    const hasOsBase = tableInfo.some(col => col.name === 'os_base');
-
-    if (!hasOdPrism) {
-      console.log('Migration 5a: Adding od_prism column...');
-      db.prepare(`ALTER TABLE orders ADD COLUMN od_prism TEXT`).run();
-      console.log('✅ Added od_prism column');
-    }
-
-    if (!hasOdBase) {
-      console.log('Migration 5b: Adding od_base column...');
-      db.prepare(`ALTER TABLE orders ADD COLUMN od_base TEXT`).run();
-      console.log('✅ Added od_base column');
-    }
-
-    if (!hasOsPrism) {
-      console.log('Migration 5c: Adding os_prism column...');
-      db.prepare(`ALTER TABLE orders ADD COLUMN os_prism TEXT`).run();
-      console.log('✅ Added os_prism column');
-    }
-
-    if (!hasOsBase) {
-      console.log('Migration 5d: Adding os_base column...');
-      db.prepare(`ALTER TABLE orders ADD COLUMN os_base TEXT`).run();
-      console.log('✅ Added os_base column');
-    }
-
     // Migration 6: Add separate PD and Seg Height fields for OD and OS
     const hasOdPd = tableInfo.some(col => col.name === 'od_pd');
     const hasOsPd = tableInfo.some(col => col.name === 'os_pd');
@@ -380,19 +350,6 @@ function initializeDatabase() {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
-    -- Frame Inventory Table
-    CREATE TABLE IF NOT EXISTS frames (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      sku TEXT UNIQUE NOT NULL,
-      name TEXT NOT NULL,
-      material TEXT,
-      description TEXT,
-      price REAL DEFAULT 0,
-      is_active INTEGER DEFAULT 1,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
     -- Orders Table
     CREATE TABLE IF NOT EXISTS orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -405,23 +362,10 @@ function initializeDatabase() {
       account_number TEXT,
       insurance TEXT,
       sold_by TEXT,
-      
-      -- Prescription Details
-      pd TEXT,
-      od_sphere TEXT,
-      od_cylinder TEXT,
-      od_axis TEXT,
-      od_prism TEXT,
-      od_base TEXT,
-      od_add TEXT,
-      os_sphere TEXT,
-      os_cylinder TEXT,
-      os_axis TEXT,
-      os_prism TEXT,
-      os_base TEXT,
-      os_add TEXT,
-      seg_height TEXT,
-      
+
+      -- Prescription Details (simplified - only PD and Seg Height for OD/OS)
+      -- Note: od_pd, os_pd, od_seg_height, os_seg_height are added via Migration 6
+
       -- Frame Information
       frame_sku TEXT,
       frame_material TEXT,
@@ -497,7 +441,6 @@ function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS idx_orders_patient ON orders(patient_name);
     CREATE INDEX IF NOT EXISTS idx_orders_number ON orders(order_number);
     CREATE INDEX IF NOT EXISTS idx_dropdown_category ON dropdown_options(category);
-    CREATE INDEX IF NOT EXISTS idx_frames_sku ON frames(sku);
   `);
 
   // Insert default dropdown options if table is empty

@@ -6,7 +6,6 @@ function AdminPanel() {
   const [dropdownOptions, setDropdownOptions] = useState({});
   const [doctors, setDoctors] = useState([]);
   const [insuranceProviders, setInsuranceProviders] = useState([]);
-  const [frames, setFrames] = useState([]);
   const [lensCategories, setLensCategories] = useState([]);
 
   // Form states
@@ -14,14 +13,12 @@ function AdminPanel() {
   const [editingOption, setEditingOption] = useState(null);
   const [editingDoctor, setEditingDoctor] = useState(null);
   const [editingInsuranceProvider, setEditingInsuranceProvider] = useState(null);
-  const [editingFrame, setEditingFrame] = useState(null);
   const [editingLensCategory, setEditingLensCategory] = useState(null);
 
   // New item forms
   const [newOption, setNewOption] = useState({ label: '', value: '', price: '', sort_order: '' });
   const [newDoctor, setNewDoctor] = useState('');
   const [newInsuranceProvider, setNewInsuranceProvider] = useState('');
-  const [newFrame, setNewFrame] = useState({ sku: '', name: '', material: '', description: '', price: '' });
   const [newLensCategory, setNewLensCategory] = useState({ category_key: '', display_label: '', sort_order: '' });
   const [categories, setCategories] = useState([]);
 
@@ -38,7 +35,6 @@ function AdminPanel() {
     await loadDropdownOptions();
     await loadDoctors();
     await loadInsuranceProviders();
-    await loadFrames();
     await loadLensCategories();
     await buildCategoriesList();
   };
@@ -95,13 +91,6 @@ function AdminPanel() {
     const result = await window.electronAPI.getInsuranceProviders();
     if (result.success) {
       setInsuranceProviders(result.data);
-    }
-  };
-
-  const loadFrames = async () => {
-    const result = await window.electronAPI.getFrames();
-    if (result.success) {
-      setFrames(result.data);
     }
   };
 
@@ -220,50 +209,6 @@ function AdminPanel() {
       const result = await window.electronAPI.deleteInsuranceProvider(id);
       if (result.success) {
         loadInsuranceProviders();
-      } else {
-        alert(`Error: ${result.error}`);
-      }
-    }
-  };
-
-  // ============ FRAMES HANDLERS ============
-
-  const handleAddFrame = async () => {
-    if (!newFrame.sku || !newFrame.name) {
-      alert('Please fill in SKU and name');
-      return;
-    }
-
-    const result = await window.electronAPI.addFrame({
-      sku: newFrame.sku,
-      name: newFrame.name,
-      material: newFrame.material,
-      description: newFrame.description,
-      price: newFrame.price === '' ? 0 : parseFloat(newFrame.price)
-    });
-    if (result.success) {
-      setNewFrame({ sku: '', name: '', material: '', description: '', price: '' });
-      loadFrames();
-    } else {
-      alert(`Error: ${result.error}`);
-    }
-  };
-
-  const handleUpdateFrame = async (id) => {
-    const result = await window.electronAPI.updateFrame(id, editingFrame);
-    if (result.success) {
-      setEditingFrame(null);
-      loadFrames();
-    } else {
-      alert(`Error: ${result.error}`);
-    }
-  };
-
-  const handleDeleteFrame = async (id) => {
-    if (window.confirm('Are you sure you want to delete this frame?')) {
-      const result = await window.electronAPI.deleteFrame(id);
-      if (result.success) {
-        loadFrames();
       } else {
         alert(`Error: ${result.error}`);
       }
@@ -409,12 +354,6 @@ function AdminPanel() {
           onClick={() => setActiveTab('insurance')}
         >
           Insurance Providers
-        </button>
-        <button
-          className={`tab ${activeTab === 'frames' ? 'active' : ''}`}
-          onClick={() => setActiveTab('frames')}
-        >
-          Frame Inventory
         </button>
         <button
           className={`tab ${activeTab === 'settings' ? 'active' : ''}`}
@@ -848,166 +787,6 @@ function AdminPanel() {
         </div>
       )}
 
-      {/* Frames Tab */}
-      {activeTab === 'frames' && (
-        <div className="tab-content">
-          <h3>Manage Frame Inventory</h3>
-
-          {/* Add New Frame Form */}
-          <div className="add-form">
-            <h4>Add New Frame</h4>
-            <div className="form-grid">
-              <div className="form-group">
-                <label>SKU *</label>
-                <input
-                  type="text"
-                  placeholder="e.g., 'FR-001'"
-                  value={newFrame.sku}
-                  onChange={(e) => setNewFrame({ ...newFrame, sku: e.target.value })}
-                />
-              </div>
-              <div className="form-group">
-                <label>Frame Name *</label>
-                <input
-                  type="text"
-                  placeholder="e.g., 'Classic Aviator'"
-                  value={newFrame.name}
-                  onChange={(e) => setNewFrame({ ...newFrame, name: e.target.value })}
-                />
-              </div>
-              <div className="form-group">
-                <label>Material</label>
-                <input
-                  type="text"
-                  placeholder="e.g., 'Metal'"
-                  value={newFrame.material}
-                  onChange={(e) => setNewFrame({ ...newFrame, material: e.target.value })}
-                />
-              </div>
-              <div className="form-group">
-                <label>Price ($)</label>
-                <input
-                  type="number"
-                  placeholder="0.00"
-                  value={newFrame.price}
-                  onChange={(e) => setNewFrame({ ...newFrame, price: e.target.value === '' ? '' : parseFloat(e.target.value) })}
-                  step="0.01"
-                  min="0"
-                />
-              </div>
-              <div className="form-group full-width">
-                <label>Description</label>
-                <input
-                  type="text"
-                  placeholder="Optional description"
-                  value={newFrame.description}
-                  onChange={(e) => setNewFrame({ ...newFrame, description: e.target.value })}
-                />
-              </div>
-              <button onClick={handleAddFrame} className="btn btn-primary">Add Frame</button>
-            </div>
-          </div>
-
-          {/* Frames List */}
-          <div className="options-list">
-            <h4>Current Frames</h4>
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th>SKU</th>
-                  <th>Name</th>
-                  <th>Material</th>
-                  <th>Price</th>
-                  <th>Description</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {frames.map(frame => (
-                  <tr key={frame.id}>
-                    {editingFrame?.id === frame.id ? (
-                      <>
-                        <td>
-                          <input
-                            type="text"
-                            value={editingFrame.sku}
-                            onChange={(e) => setEditingFrame({ ...editingFrame, sku: e.target.value })}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            type="text"
-                            value={editingFrame.name}
-                            onChange={(e) => setEditingFrame({ ...editingFrame, name: e.target.value })}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            type="text"
-                            value={editingFrame.material}
-                            onChange={(e) => setEditingFrame({ ...editingFrame, material: e.target.value })}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            type="number"
-                            value={editingFrame.price}
-                            onChange={(e) => setEditingFrame({ ...editingFrame, price: parseFloat(e.target.value) })}
-                            step="0.01"
-                          />
-                        </td>
-                        <td>
-                          <input
-                            type="text"
-                            value={editingFrame.description}
-                            onChange={(e) => setEditingFrame({ ...editingFrame, description: e.target.value })}
-                          />
-                        </td>
-                        <td>
-                          <button
-                            onClick={() => handleUpdateFrame(frame.id)}
-                            className="btn-small btn-success"
-                          >
-                            Save
-                          </button>
-                          <button
-                            onClick={() => setEditingFrame(null)}
-                            className="btn-small btn-secondary"
-                          >
-                            Cancel
-                          </button>
-                        </td>
-                      </>
-                    ) : (
-                      <>
-                        <td>{frame.sku}</td>
-                        <td>{frame.name}</td>
-                        <td>{frame.material}</td>
-                        <td>${frame.price.toFixed(2)}</td>
-                        <td>{frame.description}</td>
-                        <td>
-                          <button
-                            onClick={() => setEditingFrame(frame)}
-                            className="btn-small btn-primary"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDeleteFrame(frame.id)}
-                            className="btn-small btn-danger"
-                          >
-                            Delete
-                          </button>
-                        </td>
-                      </>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       {/* Settings Tab */}
       {activeTab === 'settings' && (

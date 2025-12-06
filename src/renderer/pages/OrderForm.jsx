@@ -5,7 +5,6 @@ function OrderForm() {
   const [doctors, setDoctors] = useState([]);
   const [insuranceProviders, setInsuranceProviders] = useState([]);
   const [dropdownOptions, setDropdownOptions] = useState({});
-  const [frames, setFrames] = useState([]);
   const [lensCategories, setLensCategories] = useState([]);
   const [lensSelections, setLensSelections] = useState({});
 
@@ -19,24 +18,12 @@ function OrderForm() {
     insurance: '',
     sold_by: '',
     
-    // Prescription Details
+    // Prescription Details (simplified - only PD and Seg Height for OD/OS)
     od_pd: '',
     os_pd: '',
     od_seg_height: '',
     os_seg_height: '',
-    od_sphere: '',
-    od_cylinder: '',
-    od_axis: '',
-    od_prism: '',
-    od_base: '',
-    od_add: '',
-    os_sphere: '',
-    os_cylinder: '',
-    os_axis: '',
-    os_prism: '',
-    os_base: '',
-    os_add: '',
-    
+
     // Frame Information
     frame_sku: '',
     frame_material: '',
@@ -102,7 +89,6 @@ function OrderForm() {
     loadDoctors();
     loadInsuranceProviders();
     loadDropdownOptions();
-    loadFrames();
     loadLensCategories();
   }, []);
 
@@ -180,13 +166,6 @@ function OrderForm() {
     }
   };
 
-  const loadFrames = async () => {
-    const result = await window.electronAPI.getFrames();
-    if (result.success) {
-      setFrames(result.data);
-    }
-  };
-
   const loadLensCategories = async () => {
     const result = await window.electronAPI.getActiveLensCategories();
     if (result.success) {
@@ -246,23 +225,6 @@ function OrderForm() {
       iwellness: value,
       iwellness_price: value === 'yes' ? 39.00 : 0
     }));
-  };
-
-  const handleFrameSkuChange = async (e) => {
-    const sku = e.target.value;
-    setFormData(prev => ({ ...prev, frame_sku: sku }));
-    
-    if (sku) {
-      const result = await window.electronAPI.getFrameBySku(sku);
-      if (result.success && result.data) {
-        setFormData(prev => ({
-          ...prev,
-          frame_name: result.data.name,
-          frame_material: result.data.material,
-          frame_price: result.data.price
-        }));
-      }
-    }
   };
 
   const validateFormula = (value) => {
@@ -552,7 +514,7 @@ function OrderForm() {
                 type="text"
                 name="frame_sku"
                 value={formData.frame_sku}
-                onChange={handleFrameSkuChange}
+                onChange={handleInputChange}
                 placeholder="Scan or type SKU"
               />
             </div>
