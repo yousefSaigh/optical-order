@@ -97,6 +97,128 @@
   color: #27ae60;
 }
 
+/* Lens Table Layout for Insurance Pricing */
+.lens-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.lens-table-header {
+  display: grid;
+  grid-template-columns: 130px 1fr 90px 90px;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background-color: #f5f5f5;
+  font-weight: 600;
+  font-size: 0.875rem;
+  border-bottom: 2px solid #ddd;
+}
+
+.lens-table-row {
+  display: grid;
+  grid-template-columns: 130px 1fr 90px 90px;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  align-items: center;
+  border-bottom: 1px solid #eee;
+}
+
+.lens-table-row:last-child {
+  border-bottom: none;
+}
+
+.lens-table-row:hover {
+  background-color: #f9f9f9;
+}
+
+.lens-col-category {
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+.lens-col-selection {
+  min-width: 0; /* Allow text truncation */
+}
+
+.lens-col-selection select {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+.lens-col-price {
+  text-align: right;
+  font-size: 0.875rem;
+  width: 90px;
+}
+
+.lens-col-price.price-display {
+  color: #666;
+}
+
+.insurance-price-input {
+  width: 100%;
+  max-width: 80px;
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  text-align: right;
+  font-size: 0.875rem;
+  margin-left: auto;
+}
+
+.insurance-price-input:disabled {
+  background-color: #f5f5f5;
+  color: #999;
+}
+
+.insurance-price-input:focus {
+  border-color: #3498db;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+/* Total Lens Charges Grid */
+.total-lens-charges-grid {
+  display: grid;
+  grid-template-columns: 130px 1fr 90px 90px;
+  gap: 0.75rem;
+  margin-top: 0;
+  padding: 0.75rem 1rem;
+  background-color: #e8f5e9;
+  border: 1px solid #ddd;
+  border-top: 2px solid #27ae60;
+  border-radius: 0 0 4px 4px;
+}
+
+.lens-total-row {
+  display: contents;
+}
+
+.lens-total-label {
+  font-weight: 600;
+  color: #333;
+  text-align: right;
+}
+
+.lens-total-value {
+  font-weight: 700;
+  font-size: 1rem;
+  color: #27ae60;
+  text-align: right;
+}
+
+.lens-total-value.insurance-total {
+  color: #2980b9;
+}
+
 /* Pricing Section */
 .pricing-section {
   background-color: #fff9e6;
@@ -106,37 +228,69 @@
 .pricing-grid {
   display: flex;
   flex-direction: column;
+  gap: 0;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.pricing-header {
+  display: grid;
+  grid-template-columns: 1fr 120px 120px;
   gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background-color: #f5f5f5;
+  font-weight: 600;
+  font-size: 0.875rem;
+  border-bottom: 2px solid #ddd;
+}
+
+.pricing-header span:not(:first-child) {
+  text-align: right;
 }
 
 .pricing-row {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr 120px 120px;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
   align-items: center;
-  padding: 0.5rem;
   background-color: white;
-  border-radius: 4px;
+  border-bottom: 1px solid #eee;
+}
+
+.pricing-row:last-child {
+  border-bottom: none;
+}
+
+.pricing-row:hover {
+  background-color: #f9f9f9;
 }
 
 .pricing-row.total {
   background-color: #e8f5e9;
-  font-size: 1.125rem;
+  font-weight: 600;
 }
 
 .pricing-row.final {
   background-color: #fff3cd;
-  font-size: 1.25rem;
-  border: 2px solid #f39c12;
+  font-weight: 700;
+  border-top: 2px solid #f39c12;
 }
 
 .pricing-row .price {
+  text-align: right;
   font-weight: 600;
   color: #2c3e50;
 }
 
+.pricing-row .price.insurance {
+  color: #2980b9;
+}
+
 .pricing-row .final-price {
   color: #e67e22;
-  font-size: 1.5rem;
+  font-size: 1.125rem;
 }
 
 .price-input {
@@ -443,6 +597,130 @@
 .frame-price-summary .price {
   font-family: 'Courier New', monospace;
   font-weight: 500;
+}
+
+/* Payment Mode Toggle */
+.payment-mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background-color: #f0f0f0;
+  border-radius: 6px;
+}
+
+.payment-mode-toggle .toggle-label {
+  font-weight: 600;
+  color: #34495e;
+}
+
+.payment-mode-toggle .toggle-options {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.payment-mode-toggle .toggle-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border: 2px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  background-color: white;
+  transition: all 0.2s ease;
+}
+
+.payment-mode-toggle .toggle-option input[type="radio"] {
+  display: none;
+}
+
+.payment-mode-toggle .toggle-option.active {
+  border-color: #27ae60;
+  background-color: #e8f5e9;
+  color: #27ae60;
+  font-weight: 600;
+}
+
+.payment-mode-toggle .toggle-option:hover:not(.active) {
+  border-color: #bdc3c7;
+  background-color: #f8f9fa;
+}
+
+/* Payment Grid */
+.payment-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 500px;
+}
+
+.payment-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background-color: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.payment-row.highlight {
+  background-color: #fff3cd;
+  border-color: #f39c12;
+  font-weight: 600;
+}
+
+.payment-row.info-row {
+  background-color: #f8f9fa;
+  border-style: dashed;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.payment-label {
+  font-weight: 500;
+}
+
+.payment-value {
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+
+.payment-value.insurance {
+  color: #2980b9;
+}
+
+.payment-value.regular {
+  color: #27ae60;
+}
+
+.payment-input {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.payment-input .currency-prefix {
+  font-weight: 600;
+  color: #666;
+}
+
+.payment-input input {
+  width: 120px;
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+  text-align: right;
+}
+
+.payment-input input:focus {
+  border-color: #3498db;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
 }
 
 @media print {

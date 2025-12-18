@@ -13,16 +13,31 @@ function formatCurrency(value) {
 function generatePrintHTML(order) {
   // Parse lens selections from JSON
   let lensItems = [];
+  let hasInsurancePricing = false;
 
   try {
     if (order.lens_selections_json) {
       const lensSelections = JSON.parse(order.lens_selections_json);
       Object.entries(lensSelections).forEach(([category, selection]) => {
-        if (selection && selection.option_name && selection.option_name !== 'None') {
+        if (selection && (selection.option_name || selection.label || selection.value) &&
+            (selection.option_name !== 'None' && selection.value !== 'None')) {
+          const itemLabel = selection.label || selection.option_name || selection.value;
+          const regularPrice = selection.price || 0;
+          // insurance_price: null means user hasn't entered a value yet, show as 0 or blank
+          const insurancePrice = (selection.insurance_price !== null && selection.insurance_price !== undefined)
+            ? parseFloat(selection.insurance_price) || 0
+            : 0;
+
+          // Check if any item has insurance pricing entered
+          if (selection.insurance_price !== null && selection.insurance_price !== undefined) {
+            hasInsurancePricing = true;
+          }
+
           lensItems.push({
             label: category,
-            value: selection.option_name,
-            price: selection.price || 0
+            value: itemLabel,
+            price: regularPrice,
+            insurance_price: insurancePrice
           });
         }
       });
@@ -47,36 +62,71 @@ function generatePrintHTML(order) {
 
     legacyItems.forEach(item => {
       if (item.value && item.value !== 'None') {
-        lensItems.push(item);
+        lensItems.push({
+          ...item,
+          insurance_price: item.price
+        });
       }
     });
   }
 
-  // Build lens selections HTML
+  // Build lens selections HTML using table layout with insurance pricing
   let lensSelectionsHTML = '';
-  lensItems.forEach(item => {
-    lensSelectionsHTML += `
-      <tr>
-        <td style="padding: 4px 8px; border-bottom: 1px solid #ddd;">${item.label}:</td>
-        <td style="padding: 4px 8px; border-bottom: 1px solid #ddd; text-align: right;">${item.value}</td>
-        <td style="padding: 4px 8px; border-bottom: 1px solid #ddd; text-align: right;">${formatCurrency(item.price)}</td>
-      </tr>
-    `;
-  });
-
-  // Add total lens charges
   if (lensItems.length > 0) {
-    lensSelectionsHTML += `
-      <tr style="background-color: #f0f0f0; font-weight: bold;">
-        <td colspan="2" style="padding: 6px 8px; border-top: 2px solid #333;">Total Lens Charges:</td>
-        <td style="padding: 6px 8px; border-top: 2px solid #333; text-align: right;">${formatCurrency(order.total_lens_charges)}</td>
-      </tr>
+    lensSelectionsHTML = `
+      <table class="lens-table">
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th>Selection</th>
+            <th>Regular Price</th>
+            <th>Your Price</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${lensItems.map(item => `
+            <tr>
+              <td class="lens-category">${item.label}</td>
+              <td class="lens-selection">${item.value}</td>
+              <td class="lens-price">${formatCurrency(item.price)}</td>
+              <td class="lens-price insurance">${formatCurrency(item.insurance_price)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+        <tfoot>
+          <tr class="lens-totals">
+            <td colspan="2"><strong>Total Lens Charges:</strong></td>
+            <td class="lens-price"><strong>${formatCurrency(order.total_lens_charges)}</strong></td>
+            <td class="lens-price insurance"><strong>${formatCurrency(order.total_lens_insurance_charges || order.total_lens_charges)}</strong></td>
+          </tr>
+        </tfoot>
+      </table>
     `;
   }
 
   // Calculate other % adjustment amount
   const baseAmount = (order.final_price || 0) - (order.payment_today || 0);
   const percentAdjustment = baseAmount * ((order.other_percent_adjustment || 0) / 100);
+
+  // Calculate insurance pricing values
+  const materialCopay = order.material_copay || order.insurance_copay || 0;
+  const insuranceRegularPrice = (order.final_frame_price || 0) + (order.total_lens_insurance_charges || 0);
+  const insuranceAfterCopay = insuranceRegularPrice + materialCopay;
+  const insuranceSalesTax = insuranceAfterCopay * 0.0225;
+  const insuranceYouPay = insuranceAfterCopay + insuranceSalesTax + (order.other_charges_adjustment || 0);
+  const insuranceFinalPrice = insuranceYouPay + (order.warranty_price || 0);
+
+  // Calculate balance due values for payment section
+  const paymentToday = order.payment_today || 0;
+  const additionalCharges = (order.iwellness_price || 0) + (order.other_charge_1_price || 0) + (order.other_charge_2_price || 0);
+
+  // Balance due with insurance
+  const insPercentAdj = (insuranceFinalPrice - paymentToday) * ((order.other_percent_adjustment || 0) / 100);
+  const balanceDueInsurance = insuranceFinalPrice - paymentToday - insPercentAdj + additionalCharges;
+
+  // Balance due without insurance (regular)
+  const regPercentAdj = ((order.final_price || 0) - paymentToday) * ((order.other_percent_adjustment || 0) / 100);
+  const balanceDueRegular = (order.final_price || 0) - paymentToday - regPercentAdj + additionalCharges;
 
   const html = `
 <!DOCTYPE html>
@@ -105,14 +155,14 @@ function generatePrintHTML(order) {
 
     .header {
       text-align: center;
-      margin-bottom: 12px;
+      margin-bottom: 6px;
       border-bottom: 2px solid #000;
-      padding-bottom: 8px;
+      padding-bottom: 4px;
     }
 
     .header h1 {
       font-size: 16pt;
-      margin-bottom: 4px;
+      margin-bottom: 2px;
     }
 
     .header h2 {
@@ -123,12 +173,12 @@ function generatePrintHTML(order) {
     .order-info {
       display: flex;
       justify-content: space-between;
-      margin-bottom: 12px;
+      margin-bottom: 4px;
       font-size: 9pt;
     }
 
     .section {
-      margin-bottom: 10px;
+      margin-bottom: 4px;
       page-break-inside: avoid;
     }
 
@@ -136,9 +186,9 @@ function generatePrintHTML(order) {
       font-size: 11pt;
       font-weight: bold;
       background-color: #f0f0f0;
-      padding: 3px 6px;
+      padding: 2px 6px;
       border-left: 3px solid #333;
-      margin-bottom: 4px;
+      margin-bottom: 2px;
     }
 
     table {
@@ -151,23 +201,278 @@ function generatePrintHTML(order) {
       border-bottom: 1px solid #e0e0e0;
     }
 
+    .prescription-row {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
     .prescription-grid {
-      width: 100%;
+      width: auto;
       border-collapse: collapse;
-      margin: 4px 0;
+      margin: 0;
+      flex-shrink: 0;
     }
 
     .prescription-grid td,
     .prescription-grid th {
-      padding: 3px;
+      padding: 1px 6px;
       border: 1px solid #ddd;
       text-align: center;
-      font-size: 9pt;
+      font-size: 8pt;
     }
 
     .prescription-grid th {
       background-color: #f0f0f0;
       font-weight: bold;
+      font-size: 7pt;
+    }
+
+    .special-notes-inline {
+      flex: 1;
+      padding: 2px 6px;
+      background-color: #f9f9f9;
+      border: 1px solid #ddd;
+      font-size: 8pt;
+      min-height: 20px;
+    }
+
+    .special-notes-inline .notes-label {
+      font-weight: bold;
+      font-size: 7pt;
+      color: #333;
+      margin-bottom: 1px;
+    }
+
+    .pricing-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0;
+      font-size: 8pt;
+    }
+
+    .pricing-table th {
+      background-color: #f0f0f0;
+      font-weight: bold;
+      padding: 2px 6px;
+      border: 1px solid #ddd;
+      text-align: left;
+      font-size: 7pt;
+    }
+
+    .pricing-table th:nth-child(2),
+    .pricing-table th:nth-child(3) {
+      text-align: right;
+      width: 80px;
+    }
+
+    .pricing-table td {
+      padding: 1px 6px;
+      border: 1px solid #ddd;
+    }
+
+    .pricing-table .pricing-label {
+      font-weight: 500;
+    }
+
+    .pricing-table .pricing-value {
+      text-align: right;
+      width: 80px;
+    }
+
+    .pricing-table .pricing-value.insurance {
+      color: #2980b9;
+    }
+
+    .pricing-table .pricing-row.total td {
+      background-color: #e8f5e9;
+      font-weight: bold;
+    }
+
+    .pricing-table .pricing-row.final td {
+      background-color: #fff3cd;
+      font-weight: bold;
+      border-top: 2px solid #333;
+    }
+
+    .warranty-row {
+      font-size: 7pt;
+      padding: 2px 4px;
+      background-color: #f8f9fa;
+      text-align: center;
+      color: #495057;
+    }
+
+    /* Payment Table Styles */
+    .payment-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 8pt;
+    }
+
+    .payment-table th {
+      background-color: #f0f0f0;
+      font-weight: bold;
+      padding: 2px 6px;
+      border: 1px solid #ddd;
+      font-size: 7pt;
+    }
+
+    .payment-table td {
+      padding: 2px 6px;
+      border: 1px solid #ddd;
+    }
+
+    .payment-table .balance-row td {
+      background-color: #fff3cd;
+      font-weight: bold;
+    }
+
+    .other-charges-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 2px 12px;
+      margin: 0;
+    }
+
+    .other-charge-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 2px 4px;
+      border-bottom: 1px solid #ddd;
+      font-size: 8pt;
+    }
+
+    .other-charge-item .label {
+      font-weight: bold;
+      color: #333;
+    }
+
+    .patient-info-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 2px 12px;
+      margin: 0;
+    }
+
+    .patient-info-field {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .patient-info-field label {
+      font-weight: bold;
+      font-size: 8pt;
+      margin-bottom: 0;
+      color: #333;
+    }
+
+    .patient-info-field .value {
+      font-size: 9pt;
+      padding: 1px 4px;
+      border-bottom: 1px solid #ddd;
+    }
+
+    .frame-info-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 2px 12px;
+      margin: 0;
+    }
+
+    .frame-info-field {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .frame-info-field label {
+      font-weight: bold;
+      font-size: 8pt;
+      margin-bottom: 0;
+      color: #333;
+    }
+
+    .frame-info-field .value {
+      font-size: 9pt;
+      padding: 1px 4px;
+      border-bottom: 1px solid #ddd;
+    }
+
+    .frame-info-field .value.discount {
+      color: #dc3545;
+    }
+
+    .lens-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0;
+      font-size: 8pt;
+    }
+
+    .lens-table th {
+      background-color: #f0f0f0;
+      font-weight: bold;
+      padding: 2px 6px;
+      border: 1px solid #ddd;
+      text-align: left;
+      font-size: 7pt;
+    }
+
+    .lens-table th:nth-child(3),
+    .lens-table th:nth-child(4) {
+      text-align: right;
+      width: 80px;
+    }
+
+    .lens-table td {
+      padding: 1px 6px;
+      border: 1px solid #ddd;
+    }
+
+    .lens-table .lens-category {
+      font-weight: 500;
+      width: 120px;
+    }
+
+    .lens-table .lens-selection {
+      /* Takes remaining space */
+    }
+
+    .lens-table .lens-price {
+      text-align: right;
+      width: 80px;
+    }
+
+    .lens-table .lens-price.insurance {
+      color: #2980b9;
+    }
+
+    .lens-table tfoot tr {
+      background-color: #f0f0f0;
+      border-top: 2px solid #333;
+    }
+
+    .lens-table tfoot td {
+      padding: 2px 6px;
+      font-weight: bold;
+    }
+
+    .warranty-compact {
+      font-size: 8pt;
+      padding: 2px;
+      background-color: #f8f9fa;
+    }
+
+    .warranty-compact table {
+      width: 100%;
+      margin-top: 2px;
+    }
+
+    .warranty-compact td {
+      border: 1px solid #333;
+      padding: 2px 4px;
+      text-align: center;
+      font-size: 8pt;
     }
 
     @media print {
@@ -192,160 +497,137 @@ function generatePrintHTML(order) {
   <!-- Patient Information -->
   <div class="section">
     <div class="section-title">Patient Information</div>
-    <table>
-      <tr>
-        <td style="width: 30%;"><strong>Patient Name:</strong></td>
-        <td>${order.patient_name || ''}</td>
-      </tr>
-      <tr>
-        <td><strong>Doctor:</strong></td>
-        <td>${order.doctor_name || ''}</td>
-      </tr>
-      <tr>
-        <td><strong>Account Number:</strong></td>
-        <td>${order.account_number || ''}</td>
-      </tr>
-      <tr>
-        <td><strong>Insurance:</strong></td>
-        <td>${order.insurance || ''}</td>
-      </tr>
-      <tr>
-        <td><strong>Sold By:</strong></td>
-        <td>${order.sold_by || ''}</td>
-      </tr>
-    </table>
-  </div>
-
-  <!-- Prescription -->
-  <div class="section">
-    <div class="section-title">Prescription Details</div>
-    <table class="prescription-grid">
-      <tr>
-        <th></th>
-        <th>OD (Right)</th>
-        <th>OS (Left)</th>
-      </tr>
-      <tr>
-        <th>PD</th>
-        <td>${order.od_pd || ''}</td>
-        <td>${order.os_pd || ''}</td>
-      </tr>
-      <tr>
-        <th>Seg Height</th>
-        <td>${order.od_seg_height || ''}</td>
-        <td>${order.os_seg_height || ''}</td>
-      </tr>
-    </table>
+    <div class="patient-info-grid">
+      <div class="patient-info-field">
+        <label>Patient Name</label>
+        <div class="value">${order.patient_name || ''}</div>
+      </div>
+      <div class="patient-info-field">
+        <label>Date</label>
+        <div class="value">${order.order_date || ''}</div>
+      </div>
+      <div class="patient-info-field">
+        <label>Doctor</label>
+        <div class="value">${order.doctor_name || ''}</div>
+      </div>
+      <div class="patient-info-field">
+        <label>Account Number</label>
+        <div class="value">${order.account_number || ''}</div>
+      </div>
+      <div class="patient-info-field">
+        <label>Insurance</label>
+        <div class="value">${order.insurance || ''}</div>
+      </div>
+      <div class="patient-info-field">
+        <label>Sold By</label>
+        <div class="value">${order.sold_by || ''}</div>
+      </div>
+    </div>
   </div>
 
   <!-- Frame Information -->
   <div class="section">
     <div class="section-title">Frame Information</div>
-    <table>
-      <tr>
-        <td style="width: 30%;"><strong>SKU:</strong></td>
-        <td>${order.frame_sku || ''}</td>
-      </tr>
-      <tr>
-        <td><strong>Name:</strong></td>
-        <td>${order.frame_name || ''}</td>
-      </tr>
-      <tr>
-        <td><strong>Material:</strong></td>
-        <td>${order.frame_material || ''}</td>
-      </tr>
-      <tr>
-        <td><strong>Frame Price:</strong></td>
-        <td>${formatCurrency(order.frame_price)}</td>
-      </tr>
-      ${(order.frame_allowance > 0 || order.frame_discount_percent > 0) ? `
-      <tr>
-        <td colspan="2" style="padding-top: 10px;">
-          <strong style="color: #666;">Insurance Frame Allowance:</strong>
-        </td>
-      </tr>
+    <div class="frame-info-grid">
+      <div class="frame-info-field">
+        <label>SKU #</label>
+        <div class="value">${order.frame_sku || ''}</div>
+      </div>
+      <div class="frame-info-field">
+        <label>Material</label>
+        <div class="value">${order.frame_material || ''}</div>
+      </div>
+      <div class="frame-info-field">
+        <label>Name/Description</label>
+        <div class="value">${order.frame_name || ''}</div>
+      </div>
+      <div class="frame-info-field">
+        <label>Frame Price</label>
+        <div class="value">${formatCurrency(order.frame_price)}</div>
+      </div>
       ${order.frame_allowance > 0 ? `
-      <tr>
-        <td style="padding-left: 20px;"><strong>Allowance:</strong></td>
-        <td style="color: #dc3545;">-${formatCurrency(order.frame_allowance)}</td>
-      </tr>
+      <div class="frame-info-field">
+        <label>Frame Allowance</label>
+        <div class="value discount">-${formatCurrency(order.frame_allowance)}</div>
+      </div>
       ` : ''}
       ${order.frame_discount_percent > 0 ? `
-      <tr>
-        <td style="padding-left: 20px;"><strong>Discount:</strong></td>
-        <td style="color: #dc3545;">${order.frame_discount_percent.toFixed(2)}% (-${formatCurrency(((order.frame_price || 0) - (order.frame_allowance || 0)) * ((order.frame_discount_percent || 0) / 100))})</td>
-      </tr>
+      <div class="frame-info-field">
+        <label>Discount</label>
+        <div class="value discount">${order.frame_discount_percent.toFixed(2)}% (-${formatCurrency(((order.frame_price || 0) - (order.frame_allowance || 0)) * ((order.frame_discount_percent || 0) / 100))})</div>
+      </div>
       ` : ''}
-      <tr>
-        <td style="padding-left: 20px;"><strong>Final Frame Price:</strong></td>
-        <td><strong>${formatCurrency(order.final_frame_price)}</strong></td>
-      </tr>
+      ${(order.frame_allowance > 0 || order.frame_discount_percent > 0) ? `
+      <div class="frame-info-field">
+        <label>Final Frame Price</label>
+        <div class="value"><strong>${formatCurrency(order.final_frame_price)}</strong></div>
+      </div>
       ` : ''}
-    </table>
+    </div>
   </div>
 
   <!-- Lens Information -->
   ${lensSelectionsHTML ? `
   <div class="section">
     <div class="section-title">Lens Information</div>
-    <table>
-      ${lensSelectionsHTML}
-    </table>
+    ${lensSelectionsHTML}
   </div>
   ` : ''}
 
   <!-- Pricing -->
   <div class="section">
     <div class="section-title">Pricing</div>
-    <table>
-      <tr>
-        <td style="width: 70%;"><strong>Regular Price:</strong></td>
-        <td style="text-align: right;">${formatCurrency(order.regular_price)}</td>
-      </tr>
-      ${order.insurance_copay > 0 ? `
-      <tr>
-        <td><strong>Insurance Copay:</strong></td>
-        <td style="text-align: right;">-${formatCurrency(order.insurance_copay)}</td>
-      </tr>
-      ` : ''}
-      <tr>
-        <td><strong>Sales Tax (2.25%):</strong></td>
-        <td style="text-align: right;">${formatCurrency(order.sales_tax)}</td>
-      </tr>
-      ${order.you_saved > 0 ? `
-      <tr>
-        <td><strong>You Saved Today:</strong></td>
-        <td style="text-align: right; color: #28a745; font-weight: 600;">${formatCurrency(order.you_saved)}</td>
-      </tr>
-      ` : ''}
-      ${order.warranty_type && order.warranty_type !== 'None' ? `
-      <tr>
-        <td><strong>One Time Protection Warranty (${order.warranty_type}):</strong></td>
-        <td style="text-align: right;">${formatCurrency(order.warranty_price)}</td>
-      </tr>
-      <tr>
-        <td colspan="2" style="padding: 10px; background-color: #f8f9fa;">
-          <div style="text-align: center; font-weight: 600; color: #495057; border-bottom: 1px solid #dee2e6; padding-bottom: 5px; margin-bottom: 5px;">
-            If Warranty was Accepted - One Time Protection Fee then
-          </div>
-          <table style="width: 100%; border-collapse: collapse; margin-top: 5px;">
-            <tr>
-              <td style="border: 1px solid #333; padding: 5px; text-align: center; font-weight: 500;">Frame Copay</td>
-              <td style="border: 1px solid #333; padding: 5px; text-align: center; font-weight: 600;">${formatCurrency((order.frame_price || 0) * 0.15)}</td>
-            </tr>
-            <tr>
-              <td style="border: 1px solid #333; padding: 5px; text-align: center; font-weight: 500;">Lens Copay</td>
-              <td style="border: 1px solid #333; padding: 5px; text-align: center; font-weight: 600;">${formatCurrency((order.total_lens_charges || 0) * 0.15)}</td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-      ` : ''}
-      <tr style="background-color: #f0f0f0; font-weight: bold; font-size: 11pt;">
-        <td style="border-top: 2px solid #333; padding: 6px;"><strong>Final Price:</strong></td>
-        <td style="border-top: 2px solid #333; padding: 6px; text-align: right;">${formatCurrency(order.final_price)}</td>
-      </tr>
+    <table class="pricing-table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Regular Price</th>
+          <th>Your Price</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="pricing-row">
+          <td class="pricing-label">Total Glasses Price</td>
+          <td class="pricing-value">${formatCurrency(order.regular_price)}</td>
+          <td class="pricing-value insurance">${formatCurrency(insuranceRegularPrice)}</td>
+        </tr>
+        <tr class="pricing-row">
+          <td class="pricing-label">Material Copay</td>
+          <td class="pricing-value">${formatCurrency(materialCopay)}</td>
+          <td class="pricing-value insurance">${formatCurrency(materialCopay)}</td>
+        </tr>
+        <tr class="pricing-row">
+          <td class="pricing-label">Sales Tax (2.25%)</td>
+          <td class="pricing-value">${formatCurrency(order.sales_tax)}</td>
+          <td class="pricing-value insurance">${formatCurrency(insuranceSalesTax)}</td>
+        </tr>
+        <tr class="pricing-row">
+          <td class="pricing-label">You Saved Today</td>
+          <td class="pricing-value">${formatCurrency(order.you_saved)}</td>
+          <td class="pricing-value insurance">${formatCurrency(order.you_saved)}</td>
+        </tr>
+        <tr class="pricing-row total">
+          <td class="pricing-label"><strong>You Pay</strong></td>
+          <td class="pricing-value"><strong>${formatCurrency(order.you_pay)}</strong></td>
+          <td class="pricing-value insurance"><strong>${formatCurrency(insuranceYouPay)}</strong></td>
+        </tr>
+        ${order.warranty_type && order.warranty_type !== 'None' ? `
+        <tr class="pricing-row">
+          <td class="pricing-label">Warranty (${order.warranty_type})</td>
+          <td class="pricing-value">${formatCurrency(order.warranty_price)}</td>
+          <td class="pricing-value insurance">${formatCurrency(order.warranty_price)}</td>
+        </tr>
+        ` : ''}
+        <tr class="pricing-row final">
+          <td class="pricing-label"><strong>Final Price</strong></td>
+          <td class="pricing-value"><strong>${formatCurrency(order.final_price)}</strong></td>
+          <td class="pricing-value insurance"><strong>${formatCurrency(insuranceFinalPrice)}</strong></td>
+        </tr>
+      </tbody>
     </table>
+    ${order.warranty_type && order.warranty_type !== 'None' ? `
+    <div class="warranty-row">If Warranty Accepted - Copay: Frame ${formatCurrency((order.frame_price || 0) * 0.15)} | Lens ${formatCurrency((order.total_lens_charges || 0) * 0.15)}</div>
+    ` : ''}
   </div>
 
   <!-- Other Charges -->
@@ -353,61 +635,97 @@ function generatePrintHTML(order) {
      order.other_charge_1_price > 0 || order.other_charge_2_price > 0) ? `
   <div class="section">
     <div class="section-title">Other Charges</div>
-    <table>
+    <div class="other-charges-grid">
       ${order.other_percent_adjustment > 0 ? `
-      <tr>
-        <td style="width: 70%;"><strong>Other % Adjustment (${order.other_percent_adjustment}%):</strong></td>
-        <td style="text-align: right;">-${formatCurrency(percentAdjustment)}</td>
-      </tr>
+      <div class="other-charge-item">
+        <span class="label">Other % Adj (${order.other_percent_adjustment}%):</span>
+        <span class="value">-${formatCurrency(percentAdjustment)}</span>
+      </div>
       ` : ''}
       ${order.iwellness === 'yes' ? `
-      <tr>
-        <td><strong>iWellness:</strong></td>
-        <td style="text-align: right;">${formatCurrency(order.iwellness_price || 39.00)}</td>
-      </tr>
+      <div class="other-charge-item">
+        <span class="label">iWellness:</span>
+        <span class="value">${formatCurrency(order.iwellness_price || 39.00)}</span>
+      </div>
       ` : ''}
       ${order.other_charge_1_type && order.other_charge_1_type !== 'none' && order.other_charge_1_price > 0 ? `
-      <tr>
-        <td><strong>${order.other_charge_1_type === 'exam_copay' ? 'Exam Copay' :
-                order.other_charge_1_type === 'cl_exam' ? 'CL Exam' : 'Other Charge'}:</strong></td>
-        <td style="text-align: right;">${formatCurrency(order.other_charge_1_price)}</td>
-      </tr>
+      <div class="other-charge-item">
+        <span class="label">${order.other_charge_1_type === 'exam_copay' ? 'Exam Copay' :
+                order.other_charge_1_type === 'cl_exam' ? 'CL Exam' : 'Other Charge'}:</span>
+        <span class="value">${formatCurrency(order.other_charge_1_price)}</span>
+      </div>
       ` : ''}
       ${order.other_charge_2_type && order.other_charge_2_type !== 'none' && order.other_charge_2_price > 0 ? `
-      <tr>
-        <td><strong>${order.other_charge_2_type === 'exam_copay' ? 'Exam Copay' :
-                order.other_charge_2_type === 'cl_exam' ? 'CL Exam' : 'Other Charge'}:</strong></td>
-        <td style="text-align: right;">${formatCurrency(order.other_charge_2_price)}</td>
-      </tr>
+      <div class="other-charge-item">
+        <span class="label">${order.other_charge_2_type === 'exam_copay' ? 'Exam Copay' :
+                order.other_charge_2_type === 'cl_exam' ? 'CL Exam' : 'Other Charge'}:</span>
+        <span class="value">${formatCurrency(order.other_charge_2_price)}</span>
+      </div>
       ` : ''}
-    </table>
-  </div>
-  ` : ''}
-
-  <!-- Payment -->
-  <div class="section">
-    <div class="section-title">Payment</div>
-    <table>
-      <tr>
-        <td style="width: 70%;"><strong>Payment Today:</strong></td>
-        <td style="text-align: right;">${formatCurrency(order.payment_today)}</td>
-      </tr>
-      <tr>
-        <td><strong>Balance Due at Pick Up:</strong></td>
-        <td style="text-align: right;">${formatCurrency(order.balance_due)}</td>
-      </tr>
-    </table>
-  </div>
-
-  <!-- Special Notes -->
-  ${order.special_notes ? `
-  <div class="section">
-    <div class="section-title">Special Notes</div>
-    <div style="padding: 6px; background-color: #f9f9f9; border: 1px solid #ddd; min-height: 30px;">
-      ${order.special_notes}
     </div>
   </div>
   ` : ''}
+
+  <!-- Payment - Dual Column Layout -->
+  <div class="section">
+    <div class="section-title">Payment</div>
+    <table class="payment-table">
+      <thead>
+        <tr>
+          <th></th>
+          <th style="text-align: right; width: 100px;">Without Insurance</th>
+          <th style="text-align: right; width: 100px;">With Insurance</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Balance:</strong></td>
+          <td style="text-align: right;">${formatCurrency(order.final_price)}</td>
+          <td style="text-align: right; color: #2980b9;">${formatCurrency(insuranceFinalPrice)}</td>
+        </tr>
+        <tr>
+          <td><strong>Today's Payment:</strong></td>
+          <td style="text-align: right;">${formatCurrency(paymentToday)}</td>
+          <td style="text-align: right;">${formatCurrency(paymentToday)}</td>
+        </tr>
+        <tr class="balance-row">
+          <td><strong>Balance Due at Pick Up:</strong></td>
+          <td style="text-align: right;"><strong>${formatCurrency(balanceDueRegular)}</strong></td>
+          <td style="text-align: right; color: #2980b9;"><strong>${formatCurrency(balanceDueInsurance)}</strong></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Prescription Details & Special Notes (side-by-side) -->
+  <div class="section">
+    <div class="section-title">Prescription Details${order.special_notes ? ' & Notes' : ''}</div>
+    <div class="prescription-row">
+      <table class="prescription-grid">
+        <tr>
+          <th></th>
+          <th>OD (Right)</th>
+          <th>OS (Left)</th>
+        </tr>
+        <tr>
+          <th>PD</th>
+          <td>${order.od_pd || ''}</td>
+          <td>${order.os_pd || ''}</td>
+        </tr>
+        <tr>
+          <th>Seg Height</th>
+          <td>${order.od_seg_height || ''}</td>
+          <td>${order.os_seg_height || ''}</td>
+        </tr>
+      </table>
+      ${order.special_notes ? `
+      <div class="special-notes-inline">
+        <div class="notes-label">Special Notes:</div>
+        <div>${order.special_notes}</div>
+      </div>
+      ` : ''}
+    </div>
+  </div>
 
   ${order.verified_by ? `
   <div style="margin-top: 12px; font-size: 9pt;">

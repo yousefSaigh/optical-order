@@ -126,7 +126,129 @@
   text-align: right;
 }
 
-/* Pricing Details */
+/* Lens Table View with Insurance Pricing */
+.lens-table-view {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.lens-table-header-row {
+  display: grid;
+  grid-template-columns: 120px 1fr 100px 100px;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background-color: #f0f0f0;
+  font-weight: 600;
+  font-size: 0.875rem;
+  border-bottom: 2px solid #ddd;
+}
+
+.lens-table-data-row {
+  display: grid;
+  grid-template-columns: 120px 1fr 100px 100px;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #eee;
+  align-items: center;
+}
+
+.lens-table-data-row:hover {
+  background-color: #f9f9f9;
+}
+
+.lens-table-totals-row {
+  display: grid;
+  grid-template-columns: 120px 1fr 100px 100px;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background-color: #f0f0f0;
+  border-top: 2px solid #333;
+}
+
+.lens-col-cat {
+  font-weight: 500;
+}
+
+.lens-col-sel {
+  /* Takes remaining space */
+}
+
+.lens-col-price {
+  text-align: right;
+  color: #27ae60;
+}
+
+.lens-col-price.insurance {
+  color: #2980b9;
+}
+
+/* Pricing Table View - 3 Column Layout */
+.pricing-table-view {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.pricing-table-header-row {
+  display: grid;
+  grid-template-columns: 1fr 100px 100px;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background-color: #f0f0f0;
+  font-weight: 600;
+  font-size: 0.8rem;
+  border-bottom: 2px solid #ddd;
+}
+
+.pricing-table-data-row {
+  display: grid;
+  grid-template-columns: 1fr 100px 100px;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #eee;
+  align-items: center;
+}
+
+.pricing-table-data-row:hover {
+  background-color: #f9f9f9;
+}
+
+.pricing-table-data-row.highlight {
+  background-color: #e8f5e9;
+}
+
+.pricing-table-data-row.saved {
+  color: #28a745;
+}
+
+.pricing-table-totals-row {
+  display: grid;
+  grid-template-columns: 1fr 100px 100px;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background-color: #fff3cd;
+  border-top: 2px solid #333;
+}
+
+.pricing-col-label {
+  font-weight: 500;
+}
+
+.pricing-col-value {
+  text-align: right;
+  color: #27ae60;
+}
+
+.pricing-col-value.insurance {
+  color: #2980b9;
+}
+
+/* Legacy Pricing Details (for backward compatibility) */
 .pricing-details {
   display: flex;
   flex-direction: column;
@@ -175,5 +297,102 @@
     grid-template-columns: 1fr;
     gap: 0.25rem;
   }
+}
+
+/* Payment Mode Toggle */
+.payment-mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background-color: #f0f0f0;
+  border-radius: 4px;
+}
+
+.payment-mode-toggle .toggle-label {
+  font-weight: 600;
+  color: #34495e;
+  font-size: 0.875rem;
+}
+
+.payment-mode-toggle .toggle-options {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.payment-mode-toggle .toggle-option {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.35rem 0.75rem;
+  border: 2px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  background-color: white;
+  font-size: 0.8rem;
+  transition: all 0.2s ease;
+}
+
+.payment-mode-toggle .toggle-option input[type="radio"] {
+  display: none;
+}
+
+.payment-mode-toggle .toggle-option.active {
+  border-color: #27ae60;
+  background-color: #e8f5e9;
+  color: #27ae60;
+  font-weight: 600;
+}
+
+.payment-mode-toggle .toggle-option:hover:not(.active) {
+  border-color: #bdc3c7;
+  background-color: #f8f9fa;
+}
+
+/* Payment Details */
+.payment-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.payment-details .payment-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+}
+
+.payment-details .payment-row.highlight {
+  background-color: #fff3cd;
+  border: 1px solid #f39c12;
+  font-weight: 600;
+}
+
+.payment-details .payment-row.info-row {
+  background-color: #f0f0f0;
+  border: 1px dashed #ccc;
+  font-size: 0.875rem;
+  color: #666;
+}
+
+.payment-details .payment-label {
+  font-weight: 500;
+}
+
+.payment-details .payment-value {
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+}
+
+.payment-details .payment-value.insurance {
+  color: #2980b9;
+}
+
+.payment-details .payment-value.regular {
+  color: #27ae60;
 }
 

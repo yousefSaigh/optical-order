@@ -54,14 +54,21 @@ function OrderForm() {
     other_option: '',
     other_option_price: 0,
     
-    // Pricing
+    // Pricing - Regular
     total_lens_charges: 0,
+    total_lens_insurance_charges: 0,
     regular_price: 0,
     sales_tax: 0,
-    insurance_copay: 0,
+    material_copay: 0,
     you_pay: 0,
     you_saved: 0,
-    
+
+    // Pricing - Insurance (Your Price)
+    insurance_regular_price: 0,
+    insurance_sales_tax: 0,
+    insurance_you_pay: 0,
+    insurance_final_price: 0,
+
     // Warranty
     warranty_type: 'None',
     warranty_price: 0,
@@ -79,9 +86,10 @@ function OrderForm() {
     custom_charge_2_price: 0,
     payment_today: 0,
     balance_due: 0,
+    balance_due_regular: 0,
+    payment_mode: 'with_insurance',
     special_notes: '',
-    verified_by: '',
-    status: 'pending'
+    verified_by: ''
   });
 
   // Load initial data
@@ -129,7 +137,7 @@ function OrderForm() {
     formData.frame_price,
     formData.final_frame_price,
     formData.warranty_price,
-    formData.insurance_copay,
+    formData.material_copay,
     formData.other_charges_adjustment,
     formData.payment_today,
     formData.other_percent_adjustment,
@@ -203,6 +211,7 @@ function OrderForm() {
       newLensSelections[categoryKey] = {
         value: value,
         price: selectedOption.price || 0,
+        insurance_price: null, // Leave empty - user must manually enter Your Price
         label: selectedOption.label
       };
     } else {
@@ -217,6 +226,21 @@ function OrderForm() {
       [`${categoryKey}_price`]: selectedOption ? selectedOption.price : 0,
       lens_selections_json: JSON.stringify(newLensSelections)
     }));
+  };
+
+  const handleLensInsurancePriceChange = (categoryKey, insurancePrice) => {
+    const newLensSelections = { ...lensSelections };
+    if (newLensSelections[categoryKey]) {
+      newLensSelections[categoryKey] = {
+        ...newLensSelections[categoryKey],
+        insurance_price: parseFloat(insurancePrice) || 0
+      };
+      setLensSelections(newLensSelections);
+      setFormData(prev => ({
+        ...prev,
+        lens_selections_json: JSON.stringify(newLensSelections)
+      }));
+    }
   };
 
   const handleIWellnessChange = (value) => {
@@ -247,10 +271,16 @@ function OrderForm() {
   const calculatePrices = () => {
     // Calculate total lens charges dynamically from lensSelections
     let totalLensCharges = 0;
+    let totalLensInsuranceCharges = 0;
 
     // Sum up all lens selections from JSON
     Object.values(lensSelections).forEach(selection => {
       totalLensCharges += parseFloat(selection.price) || 0;
+      // Only add insurance_price if it was manually entered (not null/undefined)
+      const insurancePrice = selection.insurance_price !== null && selection.insurance_price !== undefined
+        ? parseFloat(selection.insurance_price) || 0
+        : 0;
+      totalLensInsuranceCharges += insurancePrice;
     });
 
     // Also add legacy fields for backward compatibility (in case some are not in lensSelections)
@@ -268,17 +298,18 @@ function OrderForm() {
     // Use whichever is greater (handles both new and legacy data)
     totalLensCharges = Math.max(totalLensCharges, legacyLensTotal);
 
+    // ===== REGULAR PRICE CALCULATIONS =====
     // Calculate regular price (final frame price after insurance + lenses) - round to 2 decimals
     const regularPrice = parseFloat(((parseFloat(formData.final_frame_price) || 0) + totalLensCharges).toFixed(2));
 
     // Auto-calculate "You Saved Today" from insurance frame savings
     const youSaved = parseFloat(((parseFloat(formData.frame_price) || 0) - (parseFloat(formData.final_frame_price) || 0)).toFixed(2));
 
-    // Subtract insurance copay first
-    const insuranceCopay = parseFloat(formData.insurance_copay) || 0;
-    const afterCopay = parseFloat((regularPrice - insuranceCopay).toFixed(2));
+    // Add material copay to the price
+    const materialCopay = parseFloat(formData.material_copay) || 0;
+    const afterCopay = parseFloat((regularPrice + materialCopay).toFixed(2));
 
-    // Calculate sales tax (2.25%) on amount AFTER insurance copay - round to 2 decimals
+    // Calculate sales tax (2.25%) on amount AFTER adding material copay - round to 2 decimals
     const salesTax = parseFloat((afterCopay * 0.0225).toFixed(2));
 
     // Calculate you pay (after copay + tax + other charges) - round to 2 decimals
@@ -287,37 +318,61 @@ function OrderForm() {
     // Calculate final price (you pay + warranty) - round to 2 decimals
     const finalPrice = parseFloat((youPay + (parseFloat(formData.warranty_price) || 0)).toFixed(2));
 
-    // Calculate balance due with new adjustments
-    // Step 1: Start with final price - payment today
-    let balanceDue = finalPrice - (parseFloat(formData.payment_today) || 0);
+    // ===== INSURANCE PRICE CALCULATIONS (Your Price) =====
+    // Calculate insurance regular price (final frame price + insurance lens charges)
+    const insuranceRegularPrice = parseFloat(((parseFloat(formData.final_frame_price) || 0) + totalLensInsuranceCharges).toFixed(2));
 
-    // Step 2: Subtract percentage adjustment (percentage of balance due)
-    const percentAdjustment = parseFloat((balanceDue * ((parseFloat(formData.other_percent_adjustment) || 0) / 100)).toFixed(2));
-    balanceDue -= percentAdjustment;
+    // Add material copay to insurance price
+    const insuranceAfterCopay = parseFloat((insuranceRegularPrice + materialCopay).toFixed(2));
 
-    // Step 3: Add iWellness fee
+    // Calculate insurance sales tax (2.25%) on insurance amount
+    const insuranceSalesTax = parseFloat((insuranceAfterCopay * 0.0225).toFixed(2));
+
+    // Calculate insurance you pay (after copay + tax + other charges)
+    const insuranceYouPay = parseFloat((insuranceAfterCopay + insuranceSalesTax + (parseFloat(formData.other_charges_adjustment) || 0)).toFixed(2));
+
+    // Calculate insurance final price (you pay + warranty)
+    const insuranceFinalPrice = parseFloat((insuranceYouPay + (parseFloat(formData.warranty_price) || 0)).toFixed(2));
+
+    // ===== BALANCE DUE CALCULATIONS =====
+    const paymentToday = parseFloat(formData.payment_today) || 0;
+
+    // Calculate other charges that apply to both
+    const percentAdjustmentBase = parseFloat((insuranceFinalPrice - paymentToday) * ((parseFloat(formData.other_percent_adjustment) || 0) / 100)).toFixed(2);
     const iwellnessFee = parseFloat(formData.iwellness_price) || 0;
-    balanceDue += iwellnessFee;
-
-    // Step 4: Add other charge prices
     const otherCharge1Price = parseFloat(formData.other_charge_1_price) || 0;
-    balanceDue += otherCharge1Price;
-
     const otherCharge2Price = parseFloat(formData.other_charge_2_price) || 0;
-    balanceDue += otherCharge2Price;
+    const additionalCharges = iwellnessFee + otherCharge1Price + otherCharge2Price;
 
-    // Final rounding
+    // Insurance balance due (default)
+    let balanceDue = insuranceFinalPrice - paymentToday;
+    balanceDue -= parseFloat(percentAdjustmentBase);
+    balanceDue += additionalCharges;
     balanceDue = parseFloat(balanceDue.toFixed(2));
+
+    // Regular (without insurance) balance due
+    const percentAdjustmentRegular = parseFloat((finalPrice - paymentToday) * ((parseFloat(formData.other_percent_adjustment) || 0) / 100)).toFixed(2);
+    let balanceDueRegular = finalPrice - paymentToday;
+    balanceDueRegular -= parseFloat(percentAdjustmentRegular);
+    balanceDueRegular += additionalCharges;
+    balanceDueRegular = parseFloat(balanceDueRegular.toFixed(2));
 
     setFormData(prev => ({
       ...prev,
       total_lens_charges: parseFloat(totalLensCharges.toFixed(2)),
+      total_lens_insurance_charges: parseFloat(totalLensInsuranceCharges.toFixed(2)),
       regular_price: regularPrice,
       you_saved: youSaved,
       sales_tax: salesTax,
       you_pay: youPay,
       final_price: finalPrice,
-      balance_due: balanceDue
+      // Insurance pricing fields
+      insurance_regular_price: insuranceRegularPrice,
+      insurance_sales_tax: insuranceSalesTax,
+      insurance_you_pay: insuranceYouPay,
+      insurance_final_price: insuranceFinalPrice,
+      balance_due: balanceDue,
+      balance_due_regular: balanceDueRegular
     }));
   };
 
@@ -344,21 +399,64 @@ function OrderForm() {
 
       alert(successMessage);
 
-      // Reset form
-      window.location.reload();
+      
     } else {
       alert(`Error creating order: ${result.error}`);
     }
   };
 
-  const handlePrint = async () => {
+  const handlePrint = async (eS) => {
     // For now, just show alert - will implement after order is saved
-    alert('Please save the order first before printing');
+    // Add print functionality if user presses the print we need to handle it like a submit then print
+    e.preventDefault();
+    const result = await window.electronAPI.createOrder(formData);
+
+    if (result.success) {
+      const orderNumber = result.data.order_number;
+      const orderId = result.data.id;
+
+      // Show success message for order creation
+      let successMessage = `Order created successfully! Order Number: ${orderNumber}`;
+
+      const printResult = await window.electronAPI.printOrder(orderId);
+      if (printResult.success) {
+        successMessage += `\n\nOrder printed successfully!`;
+      } else {
+        successMessage += `\n\nWarning: Order saved but printing failed: ${printResult.error}`;
+      }
+
+      alert(successMessage);
+    } else {
+      alert(`Error creating order: ${result.error}`);
+    } 
   };
 
-  const handleSavePDF = async () => {
-    // For now, just show alert - will implement after order is saved
-    alert('Please save the order first before generating PDF');
+  const handleSavePDF = async (e) => {
+   e.preventDefault();
+
+    const result = await window.electronAPI.createOrder(formData);
+
+    if (result.success) {
+      const orderNumber = result.data.order_number;
+      const orderId = result.data.id;
+
+      // Show success message for order creation
+      let successMessage = `Order created successfully! Order Number: ${orderNumber}`;
+
+      // Automatically generate and save PDF
+      const pdfResult = await window.electronAPI.generatePDF(orderId, null);
+
+      if (pdfResult.success) {
+        successMessage += `\n\nPDF saved to: ${pdfResult.data.path}`;
+      } else {
+        successMessage += `\n\nWarning: Order saved but PDF generation failed: ${pdfResult.error}`;
+      }
+
+      alert(successMessage);
+      
+    } else {
+      alert(`Error creating order: ${result.error}`);
+    }
   };
 
   return (
@@ -443,67 +541,6 @@ function OrderForm() {
           </div>
         </section>
 
-        {/* Prescription Details Section */}
-        <section className="form-section">
-          <h3>Prescription Details</h3>
-
-          <div className="prescription-table">
-            <table>
-              <thead>
-                <tr>
-                  <th></th>
-                  <th>OD (Right)</th>
-                  <th>OS (Left)</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><strong>PD</strong></td>
-                  <td>
-                    <input
-                      type="text"
-                      name="od_pd"
-                      value={formData.od_pd}
-                      onChange={handleInputChange}
-                      placeholder="e.g., 32"
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="text"
-                      name="os_pd"
-                      value={formData.os_pd}
-                      onChange={handleInputChange}
-                      placeholder="e.g., 31"
-                    />
-                  </td>
-                </tr>
-                <tr>
-                  <td><strong>Seg Height</strong></td>
-                  <td>
-                    <input
-                      type="text"
-                      name="od_seg_height"
-                      value={formData.od_seg_height}
-                      onChange={handleInputChange}
-                      placeholder="e.g., 18mm"
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="text"
-                      name="os_seg_height"
-                      value={formData.os_seg_height}
-                      onChange={handleInputChange}
-                      placeholder="e.g., 18mm"
-                    />
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
         {/* Frame Selection Section */}
         <section className="form-section">
           <h3>Frame Selection</h3>
@@ -542,24 +579,23 @@ function OrderForm() {
                 onChange={handleInputChange}
               />
             </div>
-
-            <div className="form-group">
-              <label>Frame Price</label>
-              <input
-                type="number"
-                name="frame_price"
-                value={formData.frame_price}
-                onChange={handleInputChange}
-                step="0.01"
-                min="0"
-              />
-            </div>
           </div>
 
-          {/* Insurance Frame Allowance Section */}
+          {/* Frame Pricing Section */}
           <div className="insurance-frame-section">
-            <h4>Insurance Frame Allowance</h4>
             <div className="form-grid">
+              <div className="form-group">
+                <label>Frame Price</label>
+                <input
+                  type="number"
+                  name="frame_price"
+                  value={formData.frame_price}
+                  onChange={handleInputChange}
+                  step="0.01"
+                  min="0"
+                />
+              </div>
+
               <div className="form-group">
                 <label>Frame Allowance ($)</label>
                 <input
@@ -586,6 +622,19 @@ function OrderForm() {
                   max="100"
                   placeholder="0.00"
                   disabled={!formData.frame_price || formData.frame_price === 0}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Material Copay ($)</label>
+                <input
+                  type="number"
+                  name="material_copay"
+                  value={formData.material_copay}
+                  onChange={handleInputChange}
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
                 />
               </div>
             </div>
@@ -631,34 +680,57 @@ function OrderForm() {
           </div>
         </section>
 
-        {/* Lens Section - Dynamic */}
+        {/* Lens Section - Dynamic with Insurance Pricing */}
         <section className="form-section">
           <h3>Lenses</h3>
-          <div className="form-grid">
+          <div className="lens-table">
+            <div className="lens-table-header">
+              <span className="lens-col-category">Category</span>
+              <span className="lens-col-selection">Selection</span>
+              <span className="lens-col-price">Regular Price</span>
+              <span className="lens-total-value insurance-total">Your Price</span>
+            </div>
             {lensCategories.map(category => (
-              <div key={category.id} className="form-group">
-                <label>{category.display_label}</label>
-                <select
-                  name={category.category_key}
-                  value={formData[category.category_key] || ''}
-                  onChange={(e) => handleDynamicLensChange(category.category_key, e.target.value)}
-                >
-                  <option value="">Select {category.display_label}</option>
-                  {dropdownOptions[category.category_key]?.map(option => (
-                    <option key={option.id} value={option.value}>
-                      {option.label} - ${option.price.toFixed(2)}
-                    </option>
-                  ))}
-                </select>
-                <span className="price-display">
+              <div key={category.id} className="lens-table-row">
+                <span className="lens-col-category">{category.display_label}</span>
+                <div className="lens-col-selection">
+                  <select
+                    name={category.category_key}
+                    value={formData[category.category_key] || ''}
+                    onChange={(e) => handleDynamicLensChange(category.category_key, e.target.value)}
+                  >
+                    <option value="">Select {category.display_label}</option>
+                    {dropdownOptions[category.category_key]?.map(option => (
+                      <option key={option.id} value={option.value}>
+                        {option.label} - ${option.price.toFixed(2)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <span className="lens-col-price price-display">
                   ${(lensSelections[category.category_key]?.price || formData[`${category.category_key}_price`] || 0).toFixed(2)}
                 </span>
+                <div className="lens-col-price">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    className="insurance-price-input"
+                    value={lensSelections[category.category_key]?.insurance_price ?? ''}
+                    onChange={(e) => handleLensInsurancePriceChange(category.category_key, e.target.value)}
+                    placeholder="0.00"
+                    disabled={!lensSelections[category.category_key]}
+                  />
+                </div>
               </div>
             ))}
           </div>
 
-          <div className="total-lens-charges">
-            <strong>Total Lens Charges: ${formData.total_lens_charges.toFixed(2)}</strong>
+          <div className="total-lens-charges-grid">
+            <span></span>
+            <span className="lens-total-label">Totals:</span>
+            <span className="lens-total-value">${formData.total_lens_charges.toFixed(2)}</span>
+            <span className="lens-total-value insurance-total">${formData.total_lens_insurance_charges.toFixed(2)}</span>
           </div>
         </section>
 
@@ -666,33 +738,35 @@ function OrderForm() {
         <section className="form-section pricing-section">
           <h3>Pricing</h3>
           <div className="pricing-grid">
-            <div className="pricing-row">
-              <span>Regular Price:</span>
-              <span className="price">${formData.regular_price.toFixed(2)}</span>
+            <div className="pricing-header">
+              <span></span>
+              <span>Regular Price</span>
+              <span>Your Price</span>
             </div>
             <div className="pricing-row">
-              <span>Insurance Copay:</span>
-              <input
-                type="number"
-                name="insurance_copay"
-                value={formData.insurance_copay}
-                onChange={handleInputChange}
-                step="0.01"
-                min="0"
-                className="price-input"
-              />
+              <span>Total Glasses Price:</span>
+              <span className="price">${formData.regular_price.toFixed(2)}</span>
+              <span className="price insurance">${formData.insurance_regular_price.toFixed(2)}</span>
+            </div>
+            <div className="pricing-row">
+              <span>Material Copay:</span>
+              <span className="price">${parseFloat(formData.material_copay || 0).toFixed(2)}</span>
+              <span className="price insurance">${parseFloat(formData.material_copay || 0).toFixed(2)}</span>
             </div>
             <div className="pricing-row">
               <span>Sales Tax (2.25%):</span>
               <span className="price">${formData.sales_tax.toFixed(2)}</span>
+              <span className="price insurance">${formData.insurance_sales_tax.toFixed(2)}</span>
             </div>
             <div className="pricing-row">
               <span>You Saved Today:</span>
               <span className="price">${formData.you_saved.toFixed(2)}</span>
+              <span className="price insurance">${formData.you_saved.toFixed(2)}</span>
             </div>
             <div className="pricing-row total">
               <span><strong>You Pay:</strong></span>
               <span className="price"><strong>${formData.you_pay.toFixed(2)}</strong></span>
+              <span className="price insurance"><strong>${formData.insurance_you_pay.toFixed(2)}</strong></span>
             </div>
 
             <div className="warranty-section">
@@ -736,6 +810,7 @@ function OrderForm() {
             <div className="pricing-row final">
               <span><strong>Final Price:</strong></span>
               <span className="price final-price"><strong>${formData.final_price.toFixed(2)}</strong></span>
+              <span className="price final-price insurance"><strong>${formData.insurance_final_price.toFixed(2)}</strong></span>
             </div>
           </div>
         </section>
@@ -847,30 +922,129 @@ function OrderForm() {
         {/* Payment Section */}
         <section className="form-section">
           <h3>Payment</h3>
-          <div className="form-grid">
-            <div className="form-group">
-              <label>Payment Today</label>
-              <input
-                type="number"
-                name="payment_today"
-                value={formData.payment_today}
-                onChange={handleInputChange}
-                step="0.01"
-                min="0"
-              />
+
+          {/* Insurance Mode Toggle */}
+          <div className="payment-mode-toggle">
+            <label className="toggle-label">Pricing Mode:</label>
+            <div className="toggle-options">
+              <label className={`toggle-option ${formData.payment_mode === 'without_insurance' ? 'active' : ''}`}>
+                <input
+                  type="radio"
+                  name="payment_mode"
+                  value="without_insurance"
+                  checked={formData.payment_mode === 'without_insurance'}
+                  onChange={handleInputChange}
+                />
+                <span>Without Insurance</span>
+              </label>
+              <label className={`toggle-option ${formData.payment_mode === 'with_insurance' ? 'active' : ''}`}>
+                <input
+                  type="radio"
+                  name="payment_mode"
+                  value="with_insurance"
+                  checked={formData.payment_mode === 'with_insurance'}
+                  onChange={handleInputChange}
+                />
+                <span>With Insurance </span>
+              </label>
             </div>
-            <div className="form-group">
-              <label>Balance Due at Pick Up</label>
-              <input
-                type="number"
-                name="balance_due"
-                value={formData.balance_due}
-                onChange={handleInputChange}
-                step="0.01"
-                readOnly
-                className="readonly"
-              />
+          </div>
+
+          <div className="payment-grid">
+            {/* Balance row - shows starting balance before today's payment */}
+            <div className="payment-row">
+              <span className="payment-label">Balance:</span>
+              <span className="payment-value">
+                ${formData.payment_mode === 'with_insurance'
+                  ? formData.insurance_final_price.toFixed(2)
+                  : formData.final_price.toFixed(2)}
+              </span>
             </div>
+            {/* Today's Payment input */}
+            <div className="payment-row">
+              <span className="payment-label">Today's Payment:</span>
+              <div className="payment-input">
+                <span className="currency-prefix">$</span>
+                <input
+                  type="number"
+                  name="payment_today"
+                  value={formData.payment_today}
+                  onChange={handleInputChange}
+                  step="0.01"
+                  min="0"
+                />
+              </div>
+            </div>
+            {/* Balance Due at Pick Up - highlighted */}
+            <div className="payment-row highlight">
+              <span className="payment-label">Balance Due at Pick Up:</span>
+              <span className="payment-value">
+                ${formData.payment_mode === 'with_insurance'
+                  ? formData.balance_due.toFixed(2)
+                  : formData.balance_due_regular.toFixed(2)}
+              </span>
+            </div>
+          </div>
+        </section>
+
+        {/* Prescription Details Section */}
+        <section className="form-section">
+          <h3>Prescription Details</h3>
+
+          <div className="prescription-table">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>OD (Right)</th>
+                  <th>OS (Left)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>PD</strong></td>
+                  <td>
+                    <input
+                      type="text"
+                      name="od_pd"
+                      value={formData.od_pd}
+                      onChange={handleInputChange}
+                      placeholder="e.g., 32"
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="text"
+                      name="os_pd"
+                      value={formData.os_pd}
+                      onChange={handleInputChange}
+                      placeholder="e.g., 31"
+                    />
+                  </td>
+                </tr>
+                <tr>
+                  <td><strong>Seg Height</strong></td>
+                  <td>
+                    <input
+                      type="text"
+                      name="od_seg_height"
+                      value={formData.od_seg_height}
+                      onChange={handleInputChange}
+                      placeholder="e.g., 18mm"
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="text"
+                      name="os_seg_height"
+                      value={formData.os_seg_height}
+                      onChange={handleInputChange}
+                      placeholder="e.g., 18mm"
+                    />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </section>
 

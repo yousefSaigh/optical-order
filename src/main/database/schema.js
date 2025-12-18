@@ -194,6 +194,31 @@ function runMigrations() {
       console.log('✅ Added final_frame_price column');
     }
 
+    // Migration 8: Add total_lens_insurance_charges for insurance pricing feature
+    const hasTotalLensInsuranceCharges = tableInfo.some(col => col.name === 'total_lens_insurance_charges');
+
+    if (!hasTotalLensInsuranceCharges) {
+      console.log('Migration 8: Adding total_lens_insurance_charges column...');
+      db.prepare(`ALTER TABLE orders ADD COLUMN total_lens_insurance_charges REAL DEFAULT 0`).run();
+      console.log('✅ Added total_lens_insurance_charges column');
+    }
+
+    // Migration 9: Add balance_due_regular and payment_mode for dual pricing support
+    const hasBalanceDueRegular = tableInfo.some(col => col.name === 'balance_due_regular');
+    const hasPaymentMode = tableInfo.some(col => col.name === 'payment_mode');
+
+    if (!hasBalanceDueRegular) {
+      console.log('Migration 9a: Adding balance_due_regular column...');
+      db.prepare(`ALTER TABLE orders ADD COLUMN balance_due_regular REAL DEFAULT 0`).run();
+      console.log('✅ Added balance_due_regular column');
+    }
+
+    if (!hasPaymentMode) {
+      console.log('Migration 9b: Adding payment_mode column...');
+      db.prepare(`ALTER TABLE orders ADD COLUMN payment_mode TEXT DEFAULT 'with_insurance'`).run();
+      console.log('✅ Added payment_mode column');
+    }
+
     console.log('✅ All migrations completed successfully');
   } catch (error) {
     console.error('Migration error:', error);
@@ -423,7 +448,9 @@ function initializeDatabase() {
       -- Payment
       payment_today REAL DEFAULT 0,
       balance_due REAL DEFAULT 0,
-      
+      balance_due_regular REAL DEFAULT 0,
+      payment_mode TEXT DEFAULT 'with_insurance',
+
       -- Special Notes
       special_notes TEXT,
       verified_by TEXT,

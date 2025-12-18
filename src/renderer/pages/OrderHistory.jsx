@@ -6,6 +6,7 @@ function OrderHistory() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showDetails, setShowDetails] = useState(false);
+  const [paymentMode, setPaymentMode] = useState('with_insurance');
 
   useEffect(() => {
     loadOrders();
@@ -94,10 +95,17 @@ function OrderHistory() {
               .map(word => word.charAt(0).toUpperCase() + word.slice(1))
               .join(' ');
 
+            const regularPrice = selection.price || 0;
+            // insurance_price: null means user hasn't entered a value yet, show as 0
+            const insurancePrice = (selection.insurance_price !== null && selection.insurance_price !== undefined)
+              ? parseFloat(selection.insurance_price) || 0
+              : 0;
+
             lensItems.push({
               label: displayLabel,
               value: selection.value,
-              price: selection.price || 0
+              price: regularPrice,
+              insurance_price: insurancePrice
             });
           }
         });
@@ -121,7 +129,10 @@ function OrderHistory() {
       { label: 'Other Add-Ons', value: order.other_option, price: order.other_option_price },
     ];
 
-    return legacyItems.filter(item => item.value && item.value !== 'None');
+    return legacyItems.filter(item => item.value && item.value !== 'None').map(item => ({
+      ...item,
+      insurance_price: item.price
+    }));
   };
 
   return (
@@ -151,7 +162,6 @@ function OrderHistory() {
               <th>Patient Name</th>
               <th>Doctor</th>
               <th>Final Price</th>
-              <th>Status</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -168,11 +178,6 @@ function OrderHistory() {
                   <td>{order.patient_name}</td>
                   <td>{order.doctor_name || 'N/A'}</td>
                   <td>{formatCurrency(order.final_price)}</td>
-                  <td>
-                    <span className={`status-badge status-${order.status}`}>
-                      {order.status}
-                    </span>
-                  </td>
                   <td className="actions">
                     <button
                       onClick={() => handleViewDetails(order.id)}
@@ -212,7 +217,7 @@ function OrderHistory() {
 
       {/* Order Details Modal */}
       {showDetails && selectedOrder && (
-        <div className="modal-overlay" onClick={() => setShowDetails(false)}>
+      <div className="modal-overlay" onClick={() => setShowDetails(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Order Details - {selectedOrder.order_number}</h3>
@@ -231,32 +236,6 @@ function OrderHistory() {
                   <div><strong>Insurance:</strong> {selectedOrder.insurance || 'N/A'}</div>
                   <div><strong>Sold By:</strong> {selectedOrder.sold_by || 'N/A'}</div>
                 </div>
-              </section>
-
-              {/* Prescription */}
-              <section className="detail-section">
-                <h4>Prescription Details</h4>
-                <table className="prescription-table">
-                  <thead>
-                    <tr>
-                      <th></th>
-                      <th>OD (Right)</th>
-                      <th>OS (Left)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td><strong>PD</strong></td>
-                      <td>{selectedOrder.od_pd || '-'}</td>
-                      <td>{selectedOrder.os_pd || '-'}</td>
-                    </tr>
-                    <tr>
-                      <td><strong>Seg Height</strong></td>
-                      <td>{selectedOrder.od_seg_height || '-'}</td>
-                      <td>{selectedOrder.os_seg_height || '-'}</td>
-                    </tr>
-                  </tbody>
-                </table>
               </section>
 
               {/* Frame */}
@@ -294,72 +273,97 @@ function OrderHistory() {
                 )}
               </section>
 
-              {/* Lenses - Dynamic */}
+              {/* Lenses - Dynamic with Insurance Pricing */}
               <section className="detail-section">
                 <h4>Lenses</h4>
-                <div className="lens-details">
+                <div className="lens-table-view">
+                  <div className="lens-table-header-row">
+                    <span className="lens-col-cat">Category</span>
+                    <span className="lens-col-sel">Selection</span>
+                    <span className="lens-col-price">Regular Price</span>
+                    <span className="lens-col-price insurance">Your Price</span>
+                  </div>
                   {getLensSelections(selectedOrder).map((item, index) => (
-                    <div key={index} className="lens-item">
-                      <span>{item.label}:</span>
-                      <span>{item.value}</span>
-                      <span>{formatCurrency(item.price)}</span>
+                    <div key={index} className="lens-table-data-row">
+                      <span className="lens-col-cat">{item.label}</span>
+                      <span className="lens-col-sel">{item.value}</span>
+                      <span className="lens-col-price">{formatCurrency(item.price)}</span>
+                      <span className="lens-col-price insurance">{formatCurrency(item.insurance_price)}</span>
                     </div>
                   ))}
+                  <div className="lens-table-totals-row">
+                    <span className="lens-col-cat"><strong>Total:</strong></span>
+                    <span className="lens-col-sel"></span>
+                    <span className="lens-col-price"><strong>{formatCurrency(selectedOrder.total_lens_charges)}</strong></span>
+                    <span className="lens-col-price insurance"><strong>{formatCurrency(selectedOrder.total_lens_insurance_charges || selectedOrder.total_lens_charges)}</strong></span>
+                  </div>
                 </div>
               </section>
 
-              {/* Pricing */}
+              {/* Pricing - 3-column layout */}
               <section className="detail-section">
                 <h4>Pricing</h4>
-                <div className="pricing-details">
-                  <div className="pricing-row">
-                    <span>Regular Price:</span>
-                    <span>{formatCurrency(selectedOrder.regular_price)}</span>
-                  </div>
-                  <div className="pricing-row">
-                    <span>Insurance Copay:</span>
-                    <span>-{formatCurrency(selectedOrder.insurance_copay)}</span>
-                  </div>
-                  <div className="pricing-row">
-                    <span>Sales Tax:</span>
-                    <span>{formatCurrency(selectedOrder.sales_tax)}</span>
-                  </div>
-                  {selectedOrder.you_saved > 0 && (
-                    <div className="pricing-row" style={{ color: '#28a745', fontWeight: '600' }}>
-                      <span>You Saved Today:</span>
-                      <span>{formatCurrency(selectedOrder.you_saved)}</span>
-                    </div>
-                  )}
-                  {selectedOrder.warranty_type && selectedOrder.warranty_type !== 'None' && (
-                    <>
-                      <div className="pricing-row">
-                        <span>One Time Protection Warranty ({selectedOrder.warranty_type}):</span>
-                        <span>{formatCurrency(selectedOrder.warranty_price)}</span>
+                {(() => {
+                  // Calculate insurance pricing values
+                  const materialCopay = selectedOrder.material_copay || selectedOrder.insurance_copay || 0;
+                  const insuranceRegularPrice = (selectedOrder.final_frame_price || 0) + (selectedOrder.total_lens_insurance_charges || 0);
+                  const insuranceAfterCopay = insuranceRegularPrice + materialCopay;
+                  const insuranceSalesTax = insuranceAfterCopay * 0.0225;
+                  const insuranceYouPay = insuranceAfterCopay + insuranceSalesTax + (selectedOrder.other_charges_adjustment || 0);
+                  const insuranceFinalPrice = insuranceYouPay + (selectedOrder.warranty_price || 0);
+
+                  return (
+                    <div className="pricing-table-view">
+                      <div className="pricing-table-header-row">
+                        <span className="pricing-col-label"></span>
+                        <span className="pricing-col-value">Regular Price</span>
+                        <span className="pricing-col-value insurance">Your Price</span>
                       </div>
-                      <div style={{ marginTop: '0.75rem', padding: '0.75rem', backgroundColor: '#f8f9fa', borderRadius: '4px', border: '1px solid #dee2e6' }}>
-                        <div style={{ fontSize: '0.9rem', fontWeight: '600', color: '#495057', textAlign: 'center', borderBottom: '1px solid #dee2e6', paddingBottom: '0.5rem', marginBottom: '0.5rem' }}>
-                          If Warranty was Accepted - One Time Protection Fee then
+                      <div className="pricing-table-data-row">
+                        <span className="pricing-col-label">Total Glasses Price</span>
+                        <span className="pricing-col-value">{formatCurrency(selectedOrder.regular_price)}</span>
+                        <span className="pricing-col-value insurance">{formatCurrency(insuranceRegularPrice)}</span>
+                      </div>
+                      <div className="pricing-table-data-row">
+                        <span className="pricing-col-label">Material Copay</span>
+                        <span className="pricing-col-value">{formatCurrency(materialCopay)}</span>
+                        <span className="pricing-col-value insurance">{formatCurrency(materialCopay)}</span>
+                      </div>
+                      <div className="pricing-table-data-row">
+                        <span className="pricing-col-label">Sales Tax (2.25%)</span>
+                        <span className="pricing-col-value">{formatCurrency(selectedOrder.sales_tax)}</span>
+                        <span className="pricing-col-value insurance">{formatCurrency(insuranceSalesTax)}</span>
+                      </div>
+                      <div className="pricing-table-data-row saved">
+                        <span className="pricing-col-label">You Saved Today</span>
+                        <span className="pricing-col-value">{formatCurrency(selectedOrder.you_saved)}</span>
+                        <span className="pricing-col-value insurance">{formatCurrency(selectedOrder.you_saved)}</span>
+                      </div>
+                      <div className="pricing-table-data-row highlight">
+                        <span className="pricing-col-label"><strong>You Pay</strong></span>
+                        <span className="pricing-col-value"><strong>{formatCurrency(selectedOrder.you_pay)}</strong></span>
+                        <span className="pricing-col-value insurance"><strong>{formatCurrency(insuranceYouPay)}</strong></span>
+                      </div>
+                      {selectedOrder.warranty_type && selectedOrder.warranty_type !== 'None' && (
+                        <div className="pricing-table-data-row">
+                          <span className="pricing-col-label">Warranty ({selectedOrder.warranty_type})</span>
+                          <span className="pricing-col-value">{formatCurrency(selectedOrder.warranty_price)}</span>
+                          <span className="pricing-col-value insurance">{formatCurrency(selectedOrder.warranty_price)}</span>
                         </div>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '0.5rem' }}>
-                          <tbody>
-                            <tr>
-                              <td style={{ padding: '0.5rem', border: '1px solid #333', textAlign: 'center', fontWeight: '500' }}>Frame Copay</td>
-                              <td style={{ padding: '0.5rem', border: '1px solid #333', textAlign: 'center', fontWeight: '600' }}>{formatCurrency((selectedOrder.frame_price || 0) * 0.15)}</td>
-                            </tr>
-                            <tr>
-                              <td style={{ padding: '0.5rem', border: '1px solid #333', textAlign: 'center', fontWeight: '500' }}>Lens Copay</td>
-                              <td style={{ padding: '0.5rem', border: '1px solid #333', textAlign: 'center', fontWeight: '600' }}>{formatCurrency((selectedOrder.total_lens_charges || 0) * 0.15)}</td>
-                            </tr>
-                          </tbody>
-                        </table>
+                      )}
+                      <div className="pricing-table-totals-row">
+                        <span className="pricing-col-label"><strong>Final Price</strong></span>
+                        <span className="pricing-col-value"><strong>{formatCurrency(selectedOrder.final_price)}</strong></span>
+                        <span className="pricing-col-value insurance"><strong>{formatCurrency(insuranceFinalPrice)}</strong></span>
                       </div>
-                    </>
-                  )}
-                  <div className="pricing-row total">
-                    <strong>Final Price:</strong>
-                    <strong>{formatCurrency(selectedOrder.final_price)}</strong>
+                    </div>
+                  );
+                })()}
+                {selectedOrder.warranty_type && selectedOrder.warranty_type !== 'None' && (
+                  <div style={{ marginTop: '0.75rem', padding: '0.5rem 0.75rem', backgroundColor: '#f8f9fa', borderRadius: '4px', border: '1px solid #dee2e6', fontSize: '0.875rem', textAlign: 'center' }}>
+                    If Warranty Accepted - Copays: Frame {formatCurrency((selectedOrder.frame_price || 0) * 0.15)} | Lens {formatCurrency((selectedOrder.total_lens_charges || 0) * 0.15)}
                   </div>
-                </div>
+                )}
               </section>
 
               {/* Other Charges Section */}
@@ -412,16 +416,111 @@ function OrderHistory() {
               {/* Payment Section */}
               <section className="detail-section">
                 <h4>Payment</h4>
-                <div className="pricing-breakdown">
-                  <div className="pricing-row">
-                    <span>Payment Today:</span>
-                    <span>{formatCurrency(selectedOrder.payment_today)}</span>
-                  </div>
-                  <div className="pricing-row">
-                    <span>Balance Due at Pick Up:</span>
-                    <span>{formatCurrency(selectedOrder.balance_due)}</span>
-                  </div>
-                </div>
+                {(() => {
+                  // Calculate insurance balance due
+                  const materialCopay = selectedOrder.material_copay || selectedOrder.insurance_copay || 0;
+                  const insuranceRegularPrice = (selectedOrder.final_frame_price || 0) + (selectedOrder.total_lens_insurance_charges || 0);
+                  const insuranceAfterCopay = insuranceRegularPrice + materialCopay;
+                  const insuranceSalesTax = insuranceAfterCopay * 0.0225;
+                  const insuranceYouPay = insuranceAfterCopay + insuranceSalesTax + (selectedOrder.other_charges_adjustment || 0);
+                  const insuranceFinalPrice = insuranceYouPay + (selectedOrder.warranty_price || 0);
+
+                  const paymentToday = selectedOrder.payment_today || 0;
+
+                  // Calculate balance due with insurance
+                  const percentAdjustment = (insuranceFinalPrice - paymentToday) * ((selectedOrder.other_percent_adjustment || 0) / 100);
+                  const additionalCharges = (selectedOrder.iwellness_price || 0) +
+                    (selectedOrder.other_charge_1_price || 0) +
+                    (selectedOrder.other_charge_2_price || 0);
+                  const balanceDueInsurance = insuranceFinalPrice - paymentToday - percentAdjustment + additionalCharges;
+
+                  // Calculate balance due without insurance
+                  const percentAdjustmentRegular = (selectedOrder.final_price - paymentToday) * ((selectedOrder.other_percent_adjustment || 0) / 100);
+                  const balanceDueRegular = selectedOrder.final_price - paymentToday - percentAdjustmentRegular + additionalCharges;
+
+                  return (
+                    <>
+                      {/* Insurance Mode Toggle */}
+                      <div className="payment-mode-toggle">
+                        <span className="toggle-label">Pricing Mode:</span>
+                        <div className="toggle-options">
+                          <label className={`toggle-option ${paymentMode === 'without_insurance' ? 'active' : ''}`}>
+                            <input
+                              type="radio"
+                              name="payment_mode_history"
+                              value="without_insurance"
+                              checked={paymentMode === 'without_insurance'}
+                              onChange={() => setPaymentMode('without_insurance')}
+                            />
+                            <span>Without Insurance</span>
+                          </label>
+                          <label className={`toggle-option ${paymentMode === 'with_insurance' ? 'active' : ''}`}>
+                            <input
+                              type="radio"
+                              name="payment_mode_history"
+                              value="with_insurance"
+                              checked={paymentMode === 'with_insurance'}
+                              onChange={() => setPaymentMode('with_insurance')}
+                            />
+                            <span>With Insurance </span>
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="payment-details">
+                        {/* Balance row - starting balance before today's payment */}
+                        <div className="payment-row">
+                          <span className="payment-label">Balance:</span>
+                          <span className="payment-value">
+                            {paymentMode === 'with_insurance'
+                              ? formatCurrency(insuranceFinalPrice)
+                              : formatCurrency(selectedOrder.final_price)}
+                          </span>
+                        </div>
+                        {/* Today's Payment */}
+                        <div className="payment-row">
+                          <span className="payment-label">Today's Payment:</span>
+                          <span className="payment-value">{formatCurrency(paymentToday)}</span>
+                        </div>
+                        {/* Balance Due at Pick Up - highlighted */}
+                        <div className="payment-row highlight">
+                          <span className="payment-label">Balance Due at Pick Up:</span>
+                          <span className="payment-value">
+                            {paymentMode === 'with_insurance'
+                              ? formatCurrency(balanceDueInsurance)
+                              : formatCurrency(balanceDueRegular)}
+                          </span>
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
+              </section>
+
+              {/* Prescription */}
+              <section className="detail-section">
+                <h4>Prescription Details</h4>
+                <table className="prescription-table">
+                  <thead>
+                    <tr>
+                      <th></th>
+                      <th>OD (Right)</th>
+                      <th>OS (Left)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><strong>PD</strong></td>
+                      <td>{selectedOrder.od_pd || '-'}</td>
+                      <td>{selectedOrder.os_pd || '-'}</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Seg Height</strong></td>
+                      <td>{selectedOrder.od_seg_height || '-'}</td>
+                      <td>{selectedOrder.os_seg_height || '-'}</td>
+                    </tr>
+                  </tbody>
+                </table>
               </section>
 
               {/* Special Notes */}

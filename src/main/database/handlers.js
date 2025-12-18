@@ -211,12 +211,13 @@ function createOrder(orderData) {
       edge_treatment, edge_treatment_price, prism, prism_price,
       other_option, other_option_price,
       lens_selections_json,
-      total_lens_charges, regular_price, sales_tax, insurance_copay, you_pay, you_saved,
+      total_lens_charges, total_lens_insurance_charges, regular_price, sales_tax, insurance_copay, you_pay, you_saved,
       warranty_type, warranty_price, final_price,
       other_charges_adjustment, other_charges_notes,
       other_percent_adjustment, iwellness, iwellness_price,
       other_charge_1_type, other_charge_1_price, other_charge_2_type, other_charge_2_price,
-      payment_today, balance_due, special_notes, verified_by, status
+      payment_today, balance_due, balance_due_regular, payment_mode,
+      special_notes, verified_by, status
     ) VALUES (
       ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?,
@@ -228,12 +229,13 @@ function createOrder(orderData) {
       ?, ?, ?, ?,
       ?, ?,
       ?,
-      ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?,
       ?, ?,
-      ?, ?, ?, ?, ?,
-      ?, ?,
-      ?, ?, ?, ?, ?
+      ?, ?, ?,
+      ?, ?, ?, ?,
+      ?, ?, ?, ?,
+      ?, ?, ?
     )
   `);
   
@@ -277,9 +279,10 @@ function createOrder(orderData) {
     orderData.other_option_price || 0,
     orderData.lens_selections_json || '{}',
     orderData.total_lens_charges || 0,
+    orderData.total_lens_insurance_charges || 0,
     orderData.regular_price || 0,
     orderData.sales_tax || 0,
-    orderData.insurance_copay || 0,
+    orderData.material_copay || orderData.insurance_copay || 0,
     orderData.you_pay || 0,
     orderData.you_saved || 0,
     orderData.warranty_type || 'None',
@@ -296,6 +299,8 @@ function createOrder(orderData) {
     orderData.other_charge_2_price || 0,
     orderData.payment_today || 0,
     orderData.balance_due || 0,
+    orderData.balance_due_regular || 0,
+    orderData.payment_mode || 'with_insurance',
     orderData.special_notes || '',
     orderData.verified_by || '',
     orderData.status || 'pending'
@@ -358,14 +363,15 @@ function updateOrder(id, orderData) {
       edge_treatment = ?, edge_treatment_price = ?, prism = ?, prism_price = ?,
       other_option = ?, other_option_price = ?,
       lens_selections_json = ?,
-      total_lens_charges = ?, regular_price = ?, sales_tax = ?, insurance_copay = ?, you_pay = ?, you_saved = ?,
+      total_lens_charges = ?, total_lens_insurance_charges = ?, regular_price = ?, sales_tax = ?, insurance_copay = ?, you_pay = ?, you_saved = ?,
       warranty_type = ?, warranty_price = ?, final_price = ?,
       other_charges_adjustment = ?, other_charges_notes = ?,
-      payment_today = ?, balance_due = ?, special_notes = ?, verified_by = ?, status = ?,
+      payment_today = ?, balance_due = ?, balance_due_regular = ?, payment_mode = ?,
+      special_notes = ?, verified_by = ?, status = ?,
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
   `);
-  
+
   stmt.run(
     orderData.patient_name, orderData.order_date, orderData.doctor_id, orderData.account_number,
     orderData.insurance, orderData.sold_by,
@@ -380,11 +386,12 @@ function updateOrder(id, orderData) {
     orderData.aspheric_price, orderData.edge_treatment, orderData.edge_treatment_price,
     orderData.prism, orderData.prism_price, orderData.other_option, orderData.other_option_price,
     orderData.lens_selections_json || '{}',
-    orderData.total_lens_charges, orderData.regular_price, orderData.sales_tax, orderData.insurance_copay,
+    orderData.total_lens_charges, orderData.total_lens_insurance_charges || 0, orderData.regular_price, orderData.sales_tax, orderData.material_copay || orderData.insurance_copay,
     orderData.you_pay, orderData.you_saved, orderData.warranty_type || 'None', orderData.warranty_price,
     orderData.final_price, orderData.other_charges_adjustment, orderData.other_charges_notes,
-    orderData.payment_today, orderData.balance_due, orderData.special_notes, orderData.verified_by,
-    orderData.status, id
+    orderData.payment_today, orderData.balance_due, orderData.balance_due_regular || 0, orderData.payment_mode || 'with_insurance',
+    orderData.special_notes, orderData.verified_by,
+    orderData.status || 'pending', id
   );
 }
 
