@@ -520,7 +520,7 @@ function generatePrintHTML(order) {
       </div>
       <div class="patient-info-field">
         <label>Sold By</label>
-        <div class="value">${order.sold_by || ''}</div>
+        <div class="value">${order.employee_name || order.sold_by || ''}</div>
       </div>
     </div>
   </div>
@@ -727,9 +727,9 @@ function generatePrintHTML(order) {
     </div>
   </div>
 
-  ${order.verified_by ? `
+  ${(order.verified_by_employee_name || order.verified_by) ? `
   <div style="margin-top: 12px; font-size: 9pt;">
-    <strong>Verified By (Initials):</strong> ${order.verified_by}
+    <strong>Verified By:</strong> ${order.verified_by_employee_name || order.verified_by}
   </div>
   ` : ''}
 </body>

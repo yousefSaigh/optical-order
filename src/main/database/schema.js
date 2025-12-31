@@ -219,6 +219,32 @@ function runMigrations() {
       console.log('✅ Added payment_mode column');
     }
 
+    // Migration 10: Add employee_id to orders and migrate sold_by data to employees table
+    const hasEmployeeId = tableInfo.some(col => col.name === 'employee_id');
+
+    if (!hasEmployeeId) {
+      console.log('Migration 10: Adding employee management support...');
+
+      // Add employee_id column to orders
+      db.prepare(`ALTER TABLE orders ADD COLUMN employee_id INTEGER REFERENCES employees(id)`).run();
+      console.log('✅ Added employee_id column to orders');
+
+      // Migrate existing sold_by values to employees table
+      migrateEmployeeData();
+    }
+
+    // Migration 11: Add verified_by_employee_id to orders
+    const hasVerifiedByEmployeeId = tableInfo.some(col => col.name === 'verified_by_employee_id');
+
+    if (!hasVerifiedByEmployeeId) {
+      console.log('Migration 11: Adding verified_by_employee_id column...');
+      db.prepare(`ALTER TABLE orders ADD COLUMN verified_by_employee_id INTEGER REFERENCES employees(id)`).run();
+      console.log('✅ Added verified_by_employee_id column to orders');
+
+      // Migrate existing verified_by values to employees table
+      migrateVerifiedByData();
+    }
+
     console.log('✅ All migrations completed successfully');
   } catch (error) {
     console.error('Migration error:', error);
@@ -322,6 +348,92 @@ function migrateLensDataToJson() {
   }
 }
 
+function migrateEmployeeData() {
+  try {
+    console.log('Migrating existing sold_by data to employees table...');
+
+    // Get all unique sold_by values from orders
+    const uniqueSoldBy = db.prepare(`
+      SELECT DISTINCT sold_by FROM orders
+      WHERE sold_by IS NOT NULL AND sold_by != ''
+    `).all();
+
+    if (uniqueSoldBy.length === 0) {
+      console.log('No sold_by data to migrate');
+      return;
+    }
+
+    // Insert employee for each unique sold_by value
+    const insertEmployee = db.prepare(`
+      INSERT INTO employees (name, initials) VALUES (?, ?)
+    `);
+    const updateOrder = db.prepare(`
+      UPDATE orders SET employee_id = ? WHERE sold_by = ?
+    `);
+
+    let migratedCount = 0;
+
+    for (const row of uniqueSoldBy) {
+      const initials = row.sold_by.trim();
+      if (!initials) continue;
+
+      // Create employee with initials as both name and initials
+      // (user can update the full name later in admin panel)
+      const result = insertEmployee.run(initials, initials);
+      const employeeId = result.lastInsertRowid;
+
+      // Update all orders with this sold_by value to use the new employee_id
+      updateOrder.run(employeeId, row.sold_by);
+      migratedCount++;
+    }
+
+    console.log(`✅ Created ${migratedCount} employee records from sold_by data`);
+  } catch (error) {
+    console.error('Error migrating employee data:', error);
+  }
+}
+
+function migrateVerifiedByData() {
+  try {
+    console.log('Migrating existing verified_by data to employees table...');
+
+    // Get all unique verified_by values from orders
+    const uniqueVerifiedBy = db.prepare(`
+      SELECT DISTINCT verified_by FROM orders
+      WHERE verified_by IS NOT NULL AND verified_by != ''
+    `).all();
+
+    if (uniqueVerifiedBy.length === 0) {
+      console.log('No verified_by data to migrate');
+      return;
+    }
+
+    let migratedCount = 0;
+
+    for (const row of uniqueVerifiedBy) {
+      const initials = row.verified_by.trim();
+      if (!initials) continue;
+
+      // Check if employee with these initials already exists
+      let employee = db.prepare('SELECT id FROM employees WHERE initials = ?').get(initials);
+
+      if (!employee) {
+        // Create new employee if not exists
+        const result = db.prepare('INSERT INTO employees (name, initials) VALUES (?, ?)').run(initials, initials);
+        employee = { id: result.lastInsertRowid };
+      }
+
+      // Update all orders with this verified_by value to use the employee_id
+      db.prepare('UPDATE orders SET verified_by_employee_id = ? WHERE verified_by = ?').run(employee.id, row.verified_by);
+      migratedCount++;
+    }
+
+    console.log(`✅ Migrated ${migratedCount} verified_by values to employee records`);
+  } catch (error) {
+    console.error('Error migrating verified_by data:', error);
+  }
+}
+
 function initializeDatabase() {
   // Create tables
   db.exec(`
@@ -352,6 +464,16 @@ function initializeDatabase() {
       name TEXT NOT NULL,
       is_active INTEGER DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Employees Table (for Sold By dropdown)
+    CREATE TABLE IF NOT EXISTS employees (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      initials TEXT NOT NULL,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
     -- Lens Categories Table (for dynamic lens category management)

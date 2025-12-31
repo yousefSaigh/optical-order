@@ -7,6 +7,7 @@ function AdminPanel() {
   const [doctors, setDoctors] = useState([]);
   const [insuranceProviders, setInsuranceProviders] = useState([]);
   const [lensCategories, setLensCategories] = useState([]);
+  const [employees, setEmployees] = useState([]);
 
   // Form states
   const [selectedCategory, setSelectedCategory] = useState('lens_design');
@@ -14,12 +15,14 @@ function AdminPanel() {
   const [editingDoctor, setEditingDoctor] = useState(null);
   const [editingInsuranceProvider, setEditingInsuranceProvider] = useState(null);
   const [editingLensCategory, setEditingLensCategory] = useState(null);
+  const [editingEmployee, setEditingEmployee] = useState(null);
 
   // New item forms
   const [newOption, setNewOption] = useState({ label: '', value: '', price: '', sort_order: '' });
   const [newDoctor, setNewDoctor] = useState('');
   const [newInsuranceProvider, setNewInsuranceProvider] = useState('');
   const [newLensCategory, setNewLensCategory] = useState({ category_key: '', display_label: '', sort_order: '' });
+  const [newEmployee, setNewEmployee] = useState({ name: '', initials: '' });
   const [categories, setCategories] = useState([]);
 
   // Settings state
@@ -36,6 +39,7 @@ function AdminPanel() {
     await loadDoctors();
     await loadInsuranceProviders();
     await loadLensCategories();
+    await loadEmployees();
     await buildCategoriesList();
   };
 
@@ -91,6 +95,13 @@ function AdminPanel() {
     const result = await window.electronAPI.getInsuranceProviders();
     if (result.success) {
       setInsuranceProviders(result.data);
+    }
+  };
+
+  const loadEmployees = async () => {
+    const result = await window.electronAPI.getAllEmployees();
+    if (result.success) {
+      setEmployees(result.data);
     }
   };
 
@@ -278,6 +289,64 @@ function AdminPanel() {
     }
   };
 
+  // ============ EMPLOYEES HANDLERS ============
+
+  const handleAddEmployee = async () => {
+    if (!newEmployee.name.trim() || !newEmployee.initials.trim()) {
+      alert('Please enter employee name and initials');
+      return;
+    }
+
+    const result = await window.electronAPI.addEmployee(newEmployee.name, newEmployee.initials);
+    if (result.success) {
+      setNewEmployee({ name: '', initials: '' });
+      loadEmployees();
+    } else {
+      alert(`Error: ${result.error}`);
+    }
+  };
+
+  const handleUpdateEmployee = async (id, name, initials) => {
+    const result = await window.electronAPI.updateEmployee(id, name, initials);
+    if (result.success) {
+      setEditingEmployee(null);
+      loadEmployees();
+    } else {
+      alert(`Error: ${result.error}`);
+    }
+  };
+
+  const handleDeleteEmployee = async (id) => {
+    if (window.confirm('Are you sure you want to deactivate this employee? They can be reactivated later.')) {
+      const result = await window.electronAPI.deleteEmployee(id);
+      if (result.success) {
+        loadEmployees();
+      } else {
+        alert(`Error: ${result.error}`);
+      }
+    }
+  };
+
+  const handleReactivateEmployee = async (id) => {
+    const result = await window.electronAPI.reactivateEmployee(id);
+    if (result.success) {
+      loadEmployees();
+    } else {
+      alert(`Error: ${result.error}`);
+    }
+  };
+
+  const handleHardDeleteEmployee = async (id) => {
+    if (window.confirm('Are you sure you want to PERMANENTLY delete this employee?\n\nThis action cannot be undone. If this employee has orders, you should deactivate instead.')) {
+      const result = await window.electronAPI.hardDeleteEmployee(id);
+      if (result.success) {
+        loadEmployees();
+      } else {
+        alert(`Error: ${result.error}`);
+      }
+    }
+  };
+
   // ============ SETTINGS HANDLERS ============
 
   const loadSettings = async () => {
@@ -354,6 +423,12 @@ function AdminPanel() {
           onClick={() => setActiveTab('insurance')}
         >
           Insurance Providers
+        </button>
+        <button
+          className={`tab ${activeTab === 'employees' ? 'active' : ''}`}
+          onClick={() => setActiveTab('employees')}
+        >
+          Employees
         </button>
         <button
           className={`tab ${activeTab === 'settings' ? 'active' : ''}`}
@@ -787,6 +862,135 @@ function AdminPanel() {
         </div>
       )}
 
+      {/* Employees Tab */}
+      {activeTab === 'employees' && (
+        <div className="tab-content">
+          <h3>Manage Employees</h3>
+          <p className="info-text">Manage employees who can be assigned to orders (Sold By field).</p>
+
+          {/* Add New Employee Form */}
+          <div className="add-form">
+            <h4>Add New Employee</h4>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Name</label>
+                <input
+                  type="text"
+                  placeholder="Full name (e.g., 'John Smith')"
+                  value={newEmployee.name}
+                  onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label>Initials</label>
+                <input
+                  type="text"
+                  placeholder="e.g., 'JS'"
+                  value={newEmployee.initials}
+                  onChange={(e) => setNewEmployee({ ...newEmployee, initials: e.target.value.toUpperCase() })}
+                  maxLength="5"
+                />
+              </div>
+              <button onClick={handleAddEmployee} className="btn btn-primary">Add Employee</button>
+            </div>
+          </div>
+
+          {/* Employees List */}
+          <div className="options-list">
+            <h4>Current Employees</h4>
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Initials</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {employees.map(employee => (
+                  <tr key={employee.id} className={employee.is_active === 0 ? 'inactive' : ''}>
+                    {editingEmployee?.id === employee.id ? (
+                      <>
+                        <td>
+                          <input
+                            type="text"
+                            value={editingEmployee.name}
+                            onChange={(e) => setEditingEmployee({ ...editingEmployee, name: e.target.value })}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="text"
+                            value={editingEmployee.initials}
+                            onChange={(e) => setEditingEmployee({ ...editingEmployee, initials: e.target.value.toUpperCase() })}
+                            maxLength="5"
+                          />
+                        </td>
+                        <td>{employee.is_active === 1 ? 'Active' : 'Inactive'}</td>
+                        <td>
+                          <button
+                            onClick={() => handleUpdateEmployee(employee.id, editingEmployee.name, editingEmployee.initials)}
+                            className="btn-small btn-success"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => setEditingEmployee(null)}
+                            className="btn-small btn-secondary"
+                          >
+                            Cancel
+                          </button>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td>{employee.name}</td>
+                        <td><strong>{employee.initials}</strong></td>
+                        <td>
+                          <span className={`status-badge ${employee.is_active === 1 ? 'active' : 'inactive'}`}>
+                            {employee.is_active === 1 ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td>
+                          <button
+                            onClick={() => setEditingEmployee(employee)}
+                            className="btn-small btn-secondary"
+                          >
+                            Edit
+                          </button>
+                          {employee.is_active === 1 ? (
+                            <button
+                              onClick={() => handleDeleteEmployee(employee.id)}
+                              className="btn-small btn-warning"
+                            >
+                              Deactivate
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleReactivateEmployee(employee.id)}
+                              className="btn-small btn-success"
+                            >
+                              Reactivate
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleHardDeleteEmployee(employee.id)}
+                            className="btn-small btn-danger"
+                            title="Permanently delete this employee"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Settings Tab */}
       {activeTab === 'settings' && (

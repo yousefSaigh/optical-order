@@ -22,6 +22,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateInsuranceProvider: (id, name) => ipcRenderer.invoke('update-insurance-provider', id, name),
   deleteInsuranceProvider: (id) => ipcRenderer.invoke('delete-insurance-provider', id),
 
+  // Employees
+  getEmployees: () => ipcRenderer.invoke('get-employees'),
+  getAllEmployees: () => ipcRenderer.invoke('get-all-employees'),
+  getEmployeeById: (id) => ipcRenderer.invoke('get-employee-by-id', id),
+  addEmployee: (name, initials) => ipcRenderer.invoke('add-employee', name, initials),
+  updateEmployee: (id, name, initials) => ipcRenderer.invoke('update-employee', id, name, initials),
+  deleteEmployee: (id) => ipcRenderer.invoke('delete-employee', id),
+  reactivateEmployee: (id) => ipcRenderer.invoke('reactivate-employee', id),
+  hardDeleteEmployee: (id) => ipcRenderer.invoke('hard-delete-employee', id),
+
   // Lens Categories
   getLensCategories: () => ipcRenderer.invoke('get-lens-categories'),
   getActiveLensCategories: () => ipcRenderer.invoke('get-active-lens-categories'),

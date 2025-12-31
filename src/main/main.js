@@ -173,6 +173,76 @@ function registerIPCHandlers() {
     }
   });
 
+  // Employees
+  ipcMain.handle('get-employees', async () => {
+    try {
+      return { success: true, data: dbHandlers.getEmployees() };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('get-all-employees', async () => {
+    try {
+      return { success: true, data: dbHandlers.getAllEmployees() };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('get-employee-by-id', async (event, id) => {
+    try {
+      return { success: true, data: dbHandlers.getEmployeeById(id) };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('add-employee', async (event, name, initials) => {
+    try {
+      const id = dbHandlers.addEmployee(name, initials);
+      return { success: true, data: { id } };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('update-employee', async (event, id, name, initials) => {
+    try {
+      dbHandlers.updateEmployee(id, name, initials);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('delete-employee', async (event, id) => {
+    try {
+      dbHandlers.deleteEmployee(id);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('reactivate-employee', async (event, id) => {
+    try {
+      dbHandlers.reactivateEmployee(id);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('hard-delete-employee', async (event, id) => {
+    try {
+      dbHandlers.hardDeleteEmployee(id);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
   // Lens Categories
   ipcMain.handle('get-lens-categories', async () => {
     try {

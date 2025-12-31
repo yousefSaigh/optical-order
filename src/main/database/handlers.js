@@ -104,6 +104,60 @@ function deleteInsuranceProvider(id) {
   stmt.run(id);
 }
 
+// ============ EMPLOYEES ============
+
+function getEmployees() {
+  const db = getDatabase();
+  return db.prepare('SELECT * FROM employees WHERE is_active = 1 ORDER BY name').all();
+}
+
+function getAllEmployees() {
+  const db = getDatabase();
+  return db.prepare('SELECT * FROM employees ORDER BY name').all();
+}
+
+function getEmployeeById(id) {
+  const db = getDatabase();
+  return db.prepare('SELECT * FROM employees WHERE id = ?').get(id);
+}
+
+function addEmployee(name, initials) {
+  const db = getDatabase();
+  const stmt = db.prepare('INSERT INTO employees (name, initials) VALUES (?, ?)');
+  const result = stmt.run(name, initials);
+  return result.lastInsertRowid;
+}
+
+function updateEmployee(id, name, initials) {
+  const db = getDatabase();
+  const stmt = db.prepare('UPDATE employees SET name = ?, initials = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+  stmt.run(name, initials, id);
+}
+
+function deleteEmployee(id) {
+  const db = getDatabase();
+  // Soft delete - set is_active to 0
+  const stmt = db.prepare('UPDATE employees SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+  stmt.run(id);
+}
+
+function reactivateEmployee(id) {
+  const db = getDatabase();
+  const stmt = db.prepare('UPDATE employees SET is_active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+  stmt.run(id);
+}
+
+function hardDeleteEmployee(id) {
+  const db = getDatabase();
+  // Check if employee has any orders
+  const ordersCount = db.prepare('SELECT COUNT(*) as count FROM orders WHERE employee_id = ?').get(id);
+  if (ordersCount.count > 0) {
+    throw new Error(`Cannot delete employee: they have ${ordersCount.count} order(s) associated. Deactivate instead.`);
+  }
+  const stmt = db.prepare('DELETE FROM employees WHERE id = ?');
+  stmt.run(id);
+}
+
 // ============ LENS CATEGORIES ============
 
 function getLensCategories() {
@@ -201,7 +255,7 @@ function createOrder(orderData) {
   
   const stmt = db.prepare(`
     INSERT INTO orders (
-      order_number, patient_name, order_date, doctor_id, account_number, insurance, sold_by,
+      order_number, patient_name, order_date, doctor_id, account_number, insurance, sold_by, employee_id,
       od_pd, os_pd, od_seg_height, os_seg_height,
       frame_sku, frame_material, frame_name, frame_formula, frame_price,
       frame_allowance, frame_discount_percent, final_frame_price,
@@ -217,9 +271,9 @@ function createOrder(orderData) {
       other_percent_adjustment, iwellness, iwellness_price,
       other_charge_1_type, other_charge_1_price, other_charge_2_type, other_charge_2_price,
       payment_today, balance_due, balance_due_regular, payment_mode,
-      special_notes, verified_by, status
+      special_notes, verified_by, verified_by_employee_id, status
     ) VALUES (
-      ?, ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?,
       ?, ?, ?, ?, ?,
       ?, ?, ?,
@@ -235,10 +289,10 @@ function createOrder(orderData) {
       ?, ?, ?,
       ?, ?, ?, ?,
       ?, ?, ?, ?,
-      ?, ?, ?
+      ?, ?, ?, ?
     )
   `);
-  
+
   const result = stmt.run(
     orderNumber,
     orderData.patient_name,
@@ -247,6 +301,7 @@ function createOrder(orderData) {
     orderData.account_number || '',
     orderData.insurance || '',
     orderData.sold_by || '',
+    orderData.employee_id || null,
     orderData.od_pd || '',
     orderData.os_pd || '',
     orderData.od_seg_height || '',
@@ -303,9 +358,10 @@ function createOrder(orderData) {
     orderData.payment_mode || 'with_insurance',
     orderData.special_notes || '',
     orderData.verified_by || '',
+    orderData.verified_by_employee_id || null,
     orderData.status || 'pending'
   );
-  
+
   return {
     id: result.lastInsertRowid,
     order_number: orderNumber
@@ -315,9 +371,13 @@ function createOrder(orderData) {
 function getOrders(limit = 100, offset = 0) {
   const db = getDatabase();
   return db.prepare(`
-    SELECT o.*, d.name as doctor_name 
+    SELECT o.*, d.name as doctor_name,
+           e.name as employee_name, e.initials as employee_initials,
+           v.name as verified_by_employee_name, v.initials as verified_by_employee_initials
     FROM orders o
     LEFT JOIN doctors d ON o.doctor_id = d.id
+    LEFT JOIN employees e ON o.employee_id = e.id
+    LEFT JOIN employees v ON o.verified_by_employee_id = v.id
     ORDER BY o.created_at DESC
     LIMIT ? OFFSET ?
   `).all(limit, offset);
@@ -326,9 +386,13 @@ function getOrders(limit = 100, offset = 0) {
 function getOrderById(id) {
   const db = getDatabase();
   return db.prepare(`
-    SELECT o.*, d.name as doctor_name 
+    SELECT o.*, d.name as doctor_name,
+           e.name as employee_name, e.initials as employee_initials,
+           v.name as verified_by_employee_name, v.initials as verified_by_employee_initials
     FROM orders o
     LEFT JOIN doctors d ON o.doctor_id = d.id
+    LEFT JOIN employees e ON o.employee_id = e.id
+    LEFT JOIN employees v ON o.verified_by_employee_id = v.id
     WHERE o.id = ?
   `).get(id);
 }
@@ -337,15 +401,21 @@ function searchOrders(searchTerm) {
   const db = getDatabase();
   const term = `%${searchTerm}%`;
   return db.prepare(`
-    SELECT o.*, d.name as doctor_name 
+    SELECT o.*, d.name as doctor_name,
+           e.name as employee_name, e.initials as employee_initials,
+           v.name as verified_by_employee_name, v.initials as verified_by_employee_initials
     FROM orders o
     LEFT JOIN doctors d ON o.doctor_id = d.id
-    WHERE o.patient_name LIKE ? 
+    LEFT JOIN employees e ON o.employee_id = e.id
+    LEFT JOIN employees v ON o.verified_by_employee_id = v.id
+    WHERE o.patient_name LIKE ?
        OR o.order_number LIKE ?
        OR o.account_number LIKE ?
+       OR e.name LIKE ?
+       OR e.initials LIKE ?
     ORDER BY o.created_at DESC
     LIMIT 100
-  `).all(term, term, term);
+  `).all(term, term, term, term, term);
 }
 
 function updateOrder(id, orderData) {
@@ -353,7 +423,7 @@ function updateOrder(id, orderData) {
   // Similar to createOrder but with UPDATE
   const stmt = db.prepare(`
     UPDATE orders SET
-      patient_name = ?, order_date = ?, doctor_id = ?, account_number = ?, insurance = ?, sold_by = ?,
+      patient_name = ?, order_date = ?, doctor_id = ?, account_number = ?, insurance = ?, sold_by = ?, employee_id = ?,
       od_pd = ?, os_pd = ?, od_seg_height = ?, os_seg_height = ?,
       frame_sku = ?, frame_material = ?, frame_name = ?, frame_formula = ?, frame_price = ?,
       frame_allowance = ?, frame_discount_percent = ?, final_frame_price = ?,
@@ -367,14 +437,14 @@ function updateOrder(id, orderData) {
       warranty_type = ?, warranty_price = ?, final_price = ?,
       other_charges_adjustment = ?, other_charges_notes = ?,
       payment_today = ?, balance_due = ?, balance_due_regular = ?, payment_mode = ?,
-      special_notes = ?, verified_by = ?, status = ?,
+      special_notes = ?, verified_by = ?, verified_by_employee_id = ?, status = ?,
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
   `);
 
   stmt.run(
     orderData.patient_name, orderData.order_date, orderData.doctor_id, orderData.account_number,
-    orderData.insurance, orderData.sold_by,
+    orderData.insurance, orderData.sold_by, orderData.employee_id || null,
     orderData.od_pd, orderData.os_pd, orderData.od_seg_height, orderData.os_seg_height,
     orderData.frame_sku, orderData.frame_material,
     orderData.frame_name, orderData.frame_formula, orderData.frame_price,
@@ -390,7 +460,7 @@ function updateOrder(id, orderData) {
     orderData.you_pay, orderData.you_saved, orderData.warranty_type || 'None', orderData.warranty_price,
     orderData.final_price, orderData.other_charges_adjustment, orderData.other_charges_notes,
     orderData.payment_today, orderData.balance_due, orderData.balance_due_regular || 0, orderData.payment_mode || 'with_insurance',
-    orderData.special_notes, orderData.verified_by,
+    orderData.special_notes, orderData.verified_by, orderData.verified_by_employee_id || null,
     orderData.status || 'pending', id
   );
 }
@@ -428,6 +498,16 @@ module.exports = {
   updateLensCategory,
   deleteLensCategory,
   toggleLensCategoryActive,
+
+  // Employees
+  getEmployees,
+  getAllEmployees,
+  getEmployeeById,
+  addEmployee,
+  updateEmployee,
+  deleteEmployee,
+  reactivateEmployee,
+  hardDeleteEmployee,
 
   // Orders
   createOrder,

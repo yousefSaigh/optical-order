@@ -43,7 +43,7 @@ function buildPDFContent(doc, order) {
   doc.font('Helvetica').text(` ${order.insurance || 'N/A'}`);
   // Column 3 (x=410)
   doc.font('Helvetica-Bold').text('Sold By:', 410, patientY, { continued: true });
-  doc.font('Helvetica').text(` ${order.sold_by || 'N/A'}`);
+  doc.font('Helvetica').text(` ${order.employee_name || order.sold_by || 'N/A'}`);
   doc.moveDown(1.5);
 
   // Frame Section - Side-by-side layout (4 columns)
@@ -437,8 +437,9 @@ function buildPDFContent(doc, order) {
       }
 
   // Footer
-  if (order.verified_by) {
-    doc.text(`Verified By (Initials): ${order.verified_by}`, 50);
+  const verifiedByDisplay = order.verified_by_employee_name || order.verified_by;
+  if (verifiedByDisplay) {
+    doc.text(`Verified By: ${verifiedByDisplay}`, 50);
   }
 }
 

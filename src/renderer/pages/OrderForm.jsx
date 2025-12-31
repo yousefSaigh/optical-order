@@ -4,6 +4,7 @@ import '../styles/OrderForm.css';
 function OrderForm() {
   const [doctors, setDoctors] = useState([]);
   const [insuranceProviders, setInsuranceProviders] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [dropdownOptions, setDropdownOptions] = useState({});
   const [lensCategories, setLensCategories] = useState([]);
   const [lensSelections, setLensSelections] = useState({});
@@ -16,7 +17,8 @@ function OrderForm() {
     doctor_id: '',
     account_number: '',
     insurance: '',
-    sold_by: '',
+    employee_id: '',
+    sold_by: '', // Keep for backward compatibility
     
     // Prescription Details (simplified - only PD and Seg Height for OD/OS)
     od_pd: '',
@@ -89,13 +91,15 @@ function OrderForm() {
     balance_due_regular: 0,
     payment_mode: 'with_insurance',
     special_notes: '',
-    verified_by: ''
+    verified_by: '',
+    verified_by_employee_id: ''
   });
 
   // Load initial data
   useEffect(() => {
     loadDoctors();
     loadInsuranceProviders();
+    loadEmployees();
     loadDropdownOptions();
     loadLensCategories();
   }, []);
@@ -157,6 +161,13 @@ function OrderForm() {
     const result = await window.electronAPI.getInsuranceProviders();
     if (result.success) {
       setInsuranceProviders(result.data);
+    }
+  };
+
+  const loadEmployees = async () => {
+    const result = await window.electronAPI.getEmployees();
+    if (result.success) {
+      setEmployees(result.data);
     }
   };
 
@@ -299,8 +310,8 @@ function OrderForm() {
     totalLensCharges = Math.max(totalLensCharges, legacyLensTotal);
 
     // ===== REGULAR PRICE CALCULATIONS =====
-    // Calculate regular price (final frame price after insurance + lenses) - round to 2 decimals
-    const regularPrice = parseFloat(((parseFloat(formData.final_frame_price) || 0) + totalLensCharges).toFixed(2));
+    // Calculate regular price using original frame_price (before insurance allowances/discounts) + lenses
+    const regularPrice = parseFloat(((parseFloat(formData.frame_price) || 0) + totalLensCharges).toFixed(2));
 
     // Auto-calculate "You Saved Today" from insurance frame savings
     const youSaved = parseFloat(((parseFloat(formData.frame_price) || 0) - (parseFloat(formData.final_frame_price) || 0)).toFixed(2));
@@ -405,7 +416,7 @@ function OrderForm() {
     }
   };
 
-  const handlePrint = async (eS) => {
+  const handlePrint = async (e) => {
     // For now, just show alert - will implement after order is saved
     // Add print functionality if user presses the print we need to handle it like a submit then print
     e.preventDefault();
@@ -529,14 +540,19 @@ function OrderForm() {
             </div>
             
             <div className="form-group">
-              <label>Sold By (Initials)</label>
-              <input
-                type="text"
-                name="sold_by"
-                value={formData.sold_by}
+              <label>Sold By</label>
+              <select
+                name="employee_id"
+                value={formData.employee_id}
                 onChange={handleInputChange}
-                maxLength="10"
-              />
+              >
+                <option value="">Select Employee</option>
+                {employees.map(employee => (
+                  <option key={employee.id} value={employee.id}>
+                    {employee.name} ({employee.initials})
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         </section>
@@ -1062,14 +1078,19 @@ function OrderForm() {
           </div>
 
           <div className="form-group">
-            <label>Verified By (Initials)</label>
-            <input
-              type="text"
-              name="verified_by"
-              value={formData.verified_by}
+            <label>Verified By</label>
+            <select
+              name="verified_by_employee_id"
+              value={formData.verified_by_employee_id}
               onChange={handleInputChange}
-              maxLength="10"
-            />
+            >
+              <option value="">Select Employee</option>
+              {employees.map(employee => (
+                <option key={employee.id} value={employee.id}>
+                  {employee.name} ({employee.initials})
+                </option>
+              ))}
+            </select>
           </div>
         </section>
 

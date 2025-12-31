@@ -234,7 +234,7 @@ function OrderHistory() {
                   <div><strong>Doctor:</strong> {selectedOrder.doctor_name || 'N/A'}</div>
                   <div><strong>Account #:</strong> {selectedOrder.account_number || 'N/A'}</div>
                   <div><strong>Insurance:</strong> {selectedOrder.insurance || 'N/A'}</div>
-                  <div><strong>Sold By:</strong> {selectedOrder.sold_by || 'N/A'}</div>
+                  <div><strong>Sold By:</strong> {selectedOrder.employee_name || selectedOrder.sold_by || 'N/A'}</div>
                 </div>
               </section>
 
@@ -530,6 +530,7 @@ function OrderHistory() {
                   <p>{selectedOrder.special_notes}</p>
                 </section>
               )}
+               <div><strong>Verified By:</strong> {selectedOrder.verified_by_employee_name || selectedOrder.verified_by || 'N/A'}</div>
             </div>
 
             <div className="modal-footer">
