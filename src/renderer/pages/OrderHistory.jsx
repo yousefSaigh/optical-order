@@ -6,7 +6,6 @@ function OrderHistory() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showDetails, setShowDetails] = useState(false);
-  const [paymentMode, setPaymentMode] = useState('with_insurance');
 
   useEffect(() => {
     loadOrders();
@@ -76,6 +75,24 @@ function OrderHistory() {
     return `$${(amount || 0).toFixed(2)}`;
   };
 
+  // Calculate the display price based on the saved payment mode
+  const getDisplayPrice = (order) => {
+    const isWithInsurance = (order.payment_mode || 'with_insurance') === 'with_insurance';
+
+    if (isWithInsurance) {
+      // Calculate insurance final price
+      const materialCopay = order.material_copay || order.insurance_copay || 0;
+      const insuranceRegularPrice = (order.final_frame_price || 0) + (order.total_lens_insurance_charges || 0);
+      const insuranceAfterCopay = insuranceRegularPrice + materialCopay;
+      const insuranceSalesTax = insuranceAfterCopay * 0.0225;
+      const insuranceYouPay = insuranceAfterCopay + insuranceSalesTax + (order.other_charges_adjustment || 0);
+      const insuranceFinalPrice = insuranceYouPay + (order.warranty_price || 0);
+      return insuranceFinalPrice;
+    } else {
+      return order.final_price || 0;
+    }
+  };
+
   const getLensSelections = (order) => {
     const lensItems = [];
 
@@ -122,7 +139,8 @@ function OrderHistory() {
       { label: 'Lens Material', value: order.lens_material, price: order.lens_material_price },
       { label: 'AR Coating', value: order.ar_coating, price: order.ar_coating_price },
       { label: 'Blue Light', value: order.blue_light, price: order.blue_light_price },
-      { label: 'Transition/Polarized', value: order.transition_polarized, price: order.transition_polarized_price },
+      { label: 'Transition', value: order.transition, price: order.transition_price },
+      { label: 'Polarized', value: order.polarized, price: order.polarized_price },
       { label: 'Aspheric', value: order.aspheric, price: order.aspheric_price },
       { label: 'Edge Treatment', value: order.edge_treatment, price: order.edge_treatment_price },
       { label: 'Prism', value: order.prism, price: order.prism_price },
@@ -177,7 +195,7 @@ function OrderHistory() {
                   <td>{formatDate(order.order_date)}</td>
                   <td>{order.patient_name}</td>
                   <td>{order.doctor_name || 'N/A'}</td>
-                  <td>{formatCurrency(order.final_price)}</td>
+                  <td>{formatCurrency(getDisplayPrice(order))}</td>
                   <td className="actions">
                     <button
                       onClick={() => handleViewDetails(order.id)}
@@ -241,35 +259,53 @@ function OrderHistory() {
               {/* Frame */}
               <section className="detail-section">
                 <h4>Frame</h4>
-                <div className="detail-grid">
-                  <div><strong>SKU:</strong> {selectedOrder.frame_sku || 'N/A'}</div>
-                  <div><strong>Material:</strong> {selectedOrder.frame_material || 'N/A'}</div>
-                  <div><strong>Name:</strong> {selectedOrder.frame_name || 'N/A'}</div>
-                  <div><strong>Frame Price:</strong> ${(selectedOrder.frame_price || 0).toFixed(2)}</div>
-                </div>
-
-                {/* Insurance Frame Allowance */}
-                {((selectedOrder.frame_allowance && selectedOrder.frame_allowance > 0) ||
-                  (selectedOrder.frame_discount_percent && selectedOrder.frame_discount_percent > 0)) && (
-                  <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
-                    <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>
-                      <strong>Insurance Frame Allowance:</strong>
-                    </div>
-                    {selectedOrder.frame_allowance > 0 && (
-                      <div style={{ paddingLeft: '1rem', color: '#dc3545' }}>
-                        Allowance: -${(selectedOrder.frame_allowance || 0).toFixed(2)}
-                      </div>
-                    )}
-                    {selectedOrder.frame_discount_percent > 0 && (
-                      <div style={{ paddingLeft: '1rem', color: '#dc3545' }}>
-                        Discount: {(selectedOrder.frame_discount_percent || 0).toFixed(2)}%
-                        (-${(((selectedOrder.frame_price || 0) - (selectedOrder.frame_allowance || 0)) * ((selectedOrder.frame_discount_percent || 0) / 100)).toFixed(2)})
-                      </div>
-                    )}
-                    <div style={{ paddingLeft: '1rem', marginTop: '0.5rem', fontWeight: 'bold' }}>
-                      Final Frame Price: ${(selectedOrder.final_frame_price || 0).toFixed(2)}
+                {selectedOrder.use_own_frame ? (
+                  <div style={{
+                    padding: '12px',
+                    backgroundColor: '#fff3cd',
+                    border: '1px solid #ffc107',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    color: '#856404'
+                  }}>
+                    <strong>Customer Using Own Frame</strong>
+                    <div style={{ marginTop: '8px', fontSize: '12px' }}>
+                      While reasonable care will be exercised in handling the frame, the office assumes no liability for loss or damage to the frame.
                     </div>
                   </div>
+                ) : (
+                  <>
+                    <div className="detail-grid">
+                      <div><strong>SKU:</strong> {selectedOrder.frame_sku || 'N/A'}</div>
+                      <div><strong>Material:</strong> {selectedOrder.frame_material || 'N/A'}</div>
+                      <div><strong>Name:</strong> {selectedOrder.frame_name || 'N/A'}</div>
+                      <div><strong>Frame Price:</strong> ${(selectedOrder.frame_price || 0).toFixed(2)}</div>
+                    </div>
+
+                    {/* Insurance Frame Allowance */}
+                    {((selectedOrder.frame_allowance && selectedOrder.frame_allowance > 0) ||
+                      (selectedOrder.frame_discount_percent && selectedOrder.frame_discount_percent > 0)) && (
+                      <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
+                        <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>
+                          <strong>Insurance Frame Allowance:</strong>
+                        </div>
+                        {selectedOrder.frame_allowance > 0 && (
+                          <div style={{ paddingLeft: '1rem', color: '#dc3545' }}>
+                            Allowance: -${(selectedOrder.frame_allowance || 0).toFixed(2)}
+                          </div>
+                        )}
+                        {selectedOrder.frame_discount_percent > 0 && (
+                          <div style={{ paddingLeft: '1rem', color: '#dc3545' }}>
+                            Discount: {(selectedOrder.frame_discount_percent || 0).toFixed(2)}%
+                            (-${(((selectedOrder.frame_price || 0) - (selectedOrder.frame_allowance || 0)) * ((selectedOrder.frame_discount_percent || 0) / 100)).toFixed(2)})
+                          </div>
+                        )}
+                        <div style={{ paddingLeft: '1rem', marginTop: '0.5rem', fontWeight: 'bold' }}>
+                          Final Frame Price: ${(selectedOrder.final_frame_price || 0).toFixed(2)}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </section>
 
@@ -376,7 +412,7 @@ function OrderHistory() {
                     {selectedOrder.other_percent_adjustment > 0 && (
                       <div className="pricing-row">
                         <span>Other % Adjustment ({selectedOrder.other_percent_adjustment}%):</span>
-                        <span>-{formatCurrency((selectedOrder.final_price - (selectedOrder.payment_today || 0)) * (selectedOrder.other_percent_adjustment / 100))}</span>
+                        <span>-{formatCurrency((selectedOrder.final_price || 0) * (selectedOrder.other_percent_adjustment / 100))}</span>
                       </div>
                     )}
                     {selectedOrder.iwellness === 'yes' && (
@@ -417,7 +453,7 @@ function OrderHistory() {
               <section className="detail-section">
                 <h4>Payment</h4>
                 {(() => {
-                  // Calculate insurance balance due
+                  // Calculate insurance final price
                   const materialCopay = selectedOrder.material_copay || selectedOrder.insurance_copay || 0;
                   const insuranceRegularPrice = (selectedOrder.final_frame_price || 0) + (selectedOrder.total_lens_insurance_charges || 0);
                   const insuranceAfterCopay = insuranceRegularPrice + materialCopay;
@@ -426,55 +462,46 @@ function OrderHistory() {
                   const insuranceFinalPrice = insuranceYouPay + (selectedOrder.warranty_price || 0);
 
                   const paymentToday = selectedOrder.payment_today || 0;
+                  const percentAdjustmentRate = (selectedOrder.other_percent_adjustment || 0) / 100;
 
-                  // Calculate balance due with insurance
-                  const percentAdjustment = (insuranceFinalPrice - paymentToday) * ((selectedOrder.other_percent_adjustment || 0) / 100);
+                  // Calculate additional charges (iWellness, Other Charge 1, Other Charge 2)
                   const additionalCharges = (selectedOrder.iwellness_price || 0) +
                     (selectedOrder.other_charge_1_price || 0) +
                     (selectedOrder.other_charge_2_price || 0);
-                  const balanceDueInsurance = insuranceFinalPrice - paymentToday - percentAdjustment + additionalCharges;
 
-                  // Calculate balance due without insurance
-                  const percentAdjustmentRegular = (selectedOrder.final_price - paymentToday) * ((selectedOrder.other_percent_adjustment || 0) / 100);
-                  const balanceDueRegular = selectedOrder.final_price - paymentToday - percentAdjustmentRegular + additionalCharges;
+                  // NEW FORMULA: percentAdjustment is calculated on finalPrice (not finalPrice - paymentToday)
+                  // Insurance: total_balance = insuranceFinalPrice - percentAdjustment + additionalCharges
+                  const percentAdjustmentInsurance = insuranceFinalPrice * percentAdjustmentRate;
+                  const totalBalanceInsurance = insuranceFinalPrice - percentAdjustmentInsurance + additionalCharges;
+                  const balanceDueInsurance = totalBalanceInsurance - paymentToday;
+
+                  // Regular (without insurance): total_balance = final_price - percentAdjustment + additionalCharges
+                  const percentAdjustmentRegular = (selectedOrder.final_price || 0) * percentAdjustmentRate;
+                  const totalBalanceRegular = (selectedOrder.final_price || 0) - percentAdjustmentRegular + additionalCharges;
+                  const balanceDueRegular = totalBalanceRegular - paymentToday;
+
+                  // Use the saved payment mode from the order
+                  const savedPaymentMode = selectedOrder.payment_mode || 'with_insurance';
+                  const isWithInsurance = savedPaymentMode === 'with_insurance';
 
                   return (
                     <>
-                      {/* Insurance Mode Toggle */}
-                      <div className="payment-mode-toggle">
-                        <span className="toggle-label">Pricing Mode:</span>
-                        <div className="toggle-options">
-                          <label className={`toggle-option ${paymentMode === 'without_insurance' ? 'active' : ''}`}>
-                            <input
-                              type="radio"
-                              name="payment_mode_history"
-                              value="without_insurance"
-                              checked={paymentMode === 'without_insurance'}
-                              onChange={() => setPaymentMode('without_insurance')}
-                            />
-                            <span>Without Insurance</span>
-                          </label>
-                          <label className={`toggle-option ${paymentMode === 'with_insurance' ? 'active' : ''}`}>
-                            <input
-                              type="radio"
-                              name="payment_mode_history"
-                              value="with_insurance"
-                              checked={paymentMode === 'with_insurance'}
-                              onChange={() => setPaymentMode('with_insurance')}
-                            />
-                            <span>With Insurance </span>
-                          </label>
-                        </div>
+                      {/* Payment Mode Display (Read-Only) */}
+                      <div className="payment-mode-display">
+                        <span className="payment-mode-label">Payment Mode:</span>
+                        <span className={`payment-mode-badge ${isWithInsurance ? 'with-insurance' : 'without-insurance'}`}>
+                          {isWithInsurance ? 'With Insurance' : 'Without Insurance'}
+                        </span>
                       </div>
 
                       <div className="payment-details">
-                        {/* Balance row - starting balance before today's payment */}
+                        {/* Balance row - total balance including all Other Charges */}
                         <div className="payment-row">
                           <span className="payment-label">Balance:</span>
                           <span className="payment-value">
-                            {paymentMode === 'with_insurance'
-                              ? formatCurrency(insuranceFinalPrice)
-                              : formatCurrency(selectedOrder.final_price)}
+                            {isWithInsurance
+                              ? formatCurrency(totalBalanceInsurance)
+                              : formatCurrency(totalBalanceRegular)}
                           </span>
                         </div>
                         {/* Today's Payment */}
@@ -486,7 +513,7 @@ function OrderHistory() {
                         <div className="payment-row highlight">
                           <span className="payment-label">Balance Due at Pick Up:</span>
                           <span className="payment-value">
-                            {paymentMode === 'with_insurance'
+                            {isWithInsurance
                               ? formatCurrency(balanceDueInsurance)
                               : formatCurrency(balanceDueRegular)}
                           </span>
@@ -506,6 +533,7 @@ function OrderHistory() {
                       <th></th>
                       <th>OD (Right)</th>
                       <th>OS (Left)</th>
+                      <th>Binocular PD</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -513,11 +541,13 @@ function OrderHistory() {
                       <td><strong>PD</strong></td>
                       <td>{selectedOrder.od_pd || '-'}</td>
                       <td>{selectedOrder.os_pd || '-'}</td>
+                      <td>{selectedOrder.binocular_pd || '-'}</td>
                     </tr>
                     <tr>
                       <td><strong>Seg Height</strong></td>
                       <td>{selectedOrder.od_seg_height || '-'}</td>
                       <td>{selectedOrder.os_seg_height || '-'}</td>
+                      <td></td>
                     </tr>
                   </tbody>
                 </table>
@@ -528,6 +558,14 @@ function OrderHistory() {
                 <section className="detail-section">
                   <h4>Special Notes</h4>
                   <p>{selectedOrder.special_notes}</p>
+                </section>
+              )}
+
+              {/* Service Rating */}
+              {selectedOrder.service_rating && (
+                <section className="detail-section">
+                  <h4>Service Rating</h4>
+                  <p>{selectedOrder.service_rating}/10</p>
                 </section>
               )}
                <div><strong>Verified By:</strong> {selectedOrder.verified_by_employee_name || selectedOrder.verified_by || 'N/A'}</div>

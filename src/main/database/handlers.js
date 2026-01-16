@@ -256,12 +256,13 @@ function createOrder(orderData) {
   const stmt = db.prepare(`
     INSERT INTO orders (
       order_number, patient_name, order_date, doctor_id, account_number, insurance, sold_by, employee_id,
-      od_pd, os_pd, od_seg_height, os_seg_height,
-      frame_sku, frame_material, frame_name, frame_formula, frame_price,
+      od_pd, os_pd, od_seg_height, os_seg_height, binocular_pd,
+      use_own_frame, frame_sku, frame_material, frame_name, frame_formula, frame_price,
       frame_allowance, frame_discount_percent, final_frame_price,
       lens_design, lens_design_price, lens_material, lens_material_price,
       ar_coating, ar_coating_price, blue_light, blue_light_price,
-      transition_polarized, transition_polarized_price, aspheric, aspheric_price,
+      transition, transition_price, polarized, polarized_price,
+      aspheric, aspheric_price,
       edge_treatment, edge_treatment_price, prism, prism_price,
       other_option, other_option_price,
       lens_selections_json,
@@ -271,15 +272,18 @@ function createOrder(orderData) {
       other_percent_adjustment, iwellness, iwellness_price,
       other_charge_1_type, other_charge_1_price, other_charge_2_type, other_charge_2_price,
       payment_today, balance_due, balance_due_regular, payment_mode,
-      special_notes, verified_by, verified_by_employee_id, status
+      special_notes, verified_by, verified_by_employee_id, status,
+      service_rating
     ) VALUES (
       ?, ?, ?, ?, ?, ?, ?, ?,
-      ?, ?, ?, ?,
+      ?, ?, ?, ?, ?,
+      ?,
       ?, ?, ?, ?, ?,
       ?, ?, ?,
       ?, ?, ?, ?,
       ?, ?, ?, ?,
       ?, ?, ?, ?,
+      ?, ?,
       ?, ?, ?, ?,
       ?, ?,
       ?,
@@ -289,7 +293,8 @@ function createOrder(orderData) {
       ?, ?, ?,
       ?, ?, ?, ?,
       ?, ?, ?, ?,
-      ?, ?, ?, ?
+      ?, ?, ?, ?,
+      ?
     )
   `);
 
@@ -306,6 +311,8 @@ function createOrder(orderData) {
     orderData.os_pd || '',
     orderData.od_seg_height || '',
     orderData.os_seg_height || '',
+    orderData.binocular_pd || '',
+    orderData.use_own_frame ? 1 : 0,
     orderData.frame_sku || '',
     orderData.frame_material || '',
     orderData.frame_name || '',
@@ -322,8 +329,10 @@ function createOrder(orderData) {
     orderData.ar_coating_price || 0,
     orderData.blue_light || '',
     orderData.blue_light_price || 0,
-    orderData.transition_polarized || '',
-    orderData.transition_polarized_price || 0,
+    orderData.transition || '',
+    orderData.transition_price || 0,
+    orderData.polarized || '',
+    orderData.polarized_price || 0,
     orderData.aspheric || '',
     orderData.aspheric_price || 0,
     orderData.edge_treatment || '',
@@ -359,7 +368,8 @@ function createOrder(orderData) {
     orderData.special_notes || '',
     orderData.verified_by || '',
     orderData.verified_by_employee_id || null,
-    orderData.status || 'pending'
+    orderData.status || 'pending',
+    orderData.service_rating || null
   );
 
   return {
@@ -424,20 +434,24 @@ function updateOrder(id, orderData) {
   const stmt = db.prepare(`
     UPDATE orders SET
       patient_name = ?, order_date = ?, doctor_id = ?, account_number = ?, insurance = ?, sold_by = ?, employee_id = ?,
-      od_pd = ?, os_pd = ?, od_seg_height = ?, os_seg_height = ?,
-      frame_sku = ?, frame_material = ?, frame_name = ?, frame_formula = ?, frame_price = ?,
+      od_pd = ?, os_pd = ?, od_seg_height = ?, os_seg_height = ?, binocular_pd = ?,
+      use_own_frame = ?, frame_sku = ?, frame_material = ?, frame_name = ?, frame_formula = ?, frame_price = ?,
       frame_allowance = ?, frame_discount_percent = ?, final_frame_price = ?,
       lens_design = ?, lens_design_price = ?, lens_material = ?, lens_material_price = ?,
       ar_coating = ?, ar_coating_price = ?, blue_light = ?, blue_light_price = ?,
-      transition_polarized = ?, transition_polarized_price = ?, aspheric = ?, aspheric_price = ?,
+      transition = ?, transition_price = ?, polarized = ?, polarized_price = ?,
+      aspheric = ?, aspheric_price = ?,
       edge_treatment = ?, edge_treatment_price = ?, prism = ?, prism_price = ?,
       other_option = ?, other_option_price = ?,
       lens_selections_json = ?,
       total_lens_charges = ?, total_lens_insurance_charges = ?, regular_price = ?, sales_tax = ?, insurance_copay = ?, you_pay = ?, you_saved = ?,
       warranty_type = ?, warranty_price = ?, final_price = ?,
       other_charges_adjustment = ?, other_charges_notes = ?,
+      other_percent_adjustment = ?, iwellness = ?, iwellness_price = ?,
+      other_charge_1_type = ?, other_charge_1_price = ?, other_charge_2_type = ?, other_charge_2_price = ?,
       payment_today = ?, balance_due = ?, balance_due_regular = ?, payment_mode = ?,
       special_notes = ?, verified_by = ?, verified_by_employee_id = ?, status = ?,
+      service_rating = ?,
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
   `);
@@ -445,23 +459,28 @@ function updateOrder(id, orderData) {
   stmt.run(
     orderData.patient_name, orderData.order_date, orderData.doctor_id, orderData.account_number,
     orderData.insurance, orderData.sold_by, orderData.employee_id || null,
-    orderData.od_pd, orderData.os_pd, orderData.od_seg_height, orderData.os_seg_height,
-    orderData.frame_sku, orderData.frame_material,
+    orderData.od_pd, orderData.os_pd, orderData.od_seg_height, orderData.os_seg_height, orderData.binocular_pd || '',
+    orderData.use_own_frame ? 1 : 0, orderData.frame_sku, orderData.frame_material,
     orderData.frame_name, orderData.frame_formula, orderData.frame_price,
     orderData.frame_allowance, orderData.frame_discount_percent, orderData.final_frame_price,
     orderData.lens_design,
     orderData.lens_design_price, orderData.lens_material, orderData.lens_material_price,
     orderData.ar_coating, orderData.ar_coating_price, orderData.blue_light, orderData.blue_light_price,
-    orderData.transition_polarized, orderData.transition_polarized_price, orderData.aspheric,
+    orderData.transition, orderData.transition_price,
+    orderData.polarized, orderData.polarized_price,
+    orderData.aspheric,
     orderData.aspheric_price, orderData.edge_treatment, orderData.edge_treatment_price,
     orderData.prism, orderData.prism_price, orderData.other_option, orderData.other_option_price,
     orderData.lens_selections_json || '{}',
     orderData.total_lens_charges, orderData.total_lens_insurance_charges || 0, orderData.regular_price, orderData.sales_tax, orderData.material_copay || orderData.insurance_copay,
     orderData.you_pay, orderData.you_saved, orderData.warranty_type || 'None', orderData.warranty_price,
     orderData.final_price, orderData.other_charges_adjustment, orderData.other_charges_notes,
+    orderData.other_percent_adjustment || 0, orderData.iwellness || 'no', orderData.iwellness_price || 0,
+    orderData.other_charge_1_type || 'none', orderData.other_charge_1_price || 0,
+    orderData.other_charge_2_type || 'none', orderData.other_charge_2_price || 0,
     orderData.payment_today, orderData.balance_due, orderData.balance_due_regular || 0, orderData.payment_mode || 'with_insurance',
     orderData.special_notes, orderData.verified_by, orderData.verified_by_employee_id || null,
-    orderData.status || 'pending', id
+    orderData.status || 'pending', orderData.service_rating || null, id
   );
 }
 

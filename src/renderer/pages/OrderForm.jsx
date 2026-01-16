@@ -8,6 +8,7 @@ function OrderForm() {
   const [dropdownOptions, setDropdownOptions] = useState({});
   const [lensCategories, setLensCategories] = useState([]);
   const [lensSelections, setLensSelections] = useState({});
+  const [binocularPdManuallyEdited, setBinocularPdManuallyEdited] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -25,8 +26,10 @@ function OrderForm() {
     os_pd: '',
     od_seg_height: '',
     os_seg_height: '',
+    binocular_pd: '',
 
     // Frame Information
+    use_own_frame: false,
     frame_sku: '',
     frame_material: '',
     frame_name: '',
@@ -45,8 +48,10 @@ function OrderForm() {
     ar_coating_price: 0,
     blue_light: '',
     blue_light_price: 0,
-    transition_polarized: '',
-    transition_polarized_price: 0,
+    transition: '',
+    transition_price: 0,
+    polarized: '',
+    polarized_price: 0,
     aspheric: '',
     aspheric_price: 0,
     edge_treatment: '',
@@ -82,17 +87,21 @@ function OrderForm() {
     other_percent_adjustment: 0,
     iwellness: 'no',
     iwellness_price: 0,
-    custom_charge_1_type: 'none',
-    custom_charge_1_price: 0,
-    custom_charge_2_type: 'none',
-    custom_charge_2_price: 0,
+    other_charge_1_type: 'none',
+    other_charge_1_price: 0,
+    other_charge_2_type: 'none',
+    other_charge_2_price: 0,
     payment_today: 0,
+    // Balance fields (includes all Other Charges)
+    total_balance: 0,
+    total_balance_regular: 0,
     balance_due: 0,
     balance_due_regular: 0,
     payment_mode: 'with_insurance',
     special_notes: '',
     verified_by: '',
-    verified_by_employee_id: ''
+    verified_by_employee_id: '',
+    service_rating: ''
   });
 
   // Load initial data
@@ -133,7 +142,8 @@ function OrderForm() {
     formData.lens_material_price,
     formData.ar_coating_price,
     formData.blue_light_price,
-    formData.transition_polarized_price,
+    formData.transition_price,
+    formData.polarized_price,
     formData.aspheric_price,
     formData.edge_treatment_price,
     formData.prism_price,
@@ -149,6 +159,33 @@ function OrderForm() {
     formData.other_charge_1_price,
     formData.other_charge_2_price
   ]);
+
+  // Auto-calculate Binocular PD when OD PD and OS PD both have numeric values
+  useEffect(() => {
+    // Skip auto-calculation if user has manually edited the binocular PD field
+    if (binocularPdManuallyEdited) {
+      return;
+    }
+
+    const odPd = parseFloat(formData.od_pd);
+    const osPd = parseFloat(formData.os_pd);
+
+    // Only calculate if both values are valid numbers
+    if (!isNaN(odPd) && !isNaN(osPd) && formData.od_pd !== '' && formData.os_pd !== '') {
+      const calculatedBinocularPd = odPd + osPd;
+      // Round to 1 decimal place for precision
+      const roundedValue = Math.round(calculatedBinocularPd * 10) / 10;
+      // Convert to string, removing unnecessary decimal if whole number
+      const displayValue = roundedValue % 1 === 0 ? String(Math.round(roundedValue)) : String(roundedValue);
+
+      if (formData.binocular_pd !== displayValue) {
+        setFormData(prev => ({
+          ...prev,
+          binocular_pd: displayValue
+        }));
+      }
+    }
+  }, [formData.od_pd, formData.os_pd, binocularPdManuallyEdited]);
 
   const loadDoctors = async () => {
     const result = await window.electronAPI.getDoctors();
@@ -197,6 +234,41 @@ function OrderForm() {
     setFormData(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
+  // Special handler for Binocular PD to track manual edits
+  const handleBinocularPdChange = (e) => {
+    const { value } = e.target;
+
+    // If user clears the field, reset manual edit flag to allow auto-calculation
+    if (value === '') {
+      setBinocularPdManuallyEdited(false);
+    } else {
+      // Mark as manually edited to prevent auto-calculation from overwriting
+      setBinocularPdManuallyEdited(true);
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      binocular_pd: value
+    }));
+  };
+
+  // Special handler for "Use own frame" checkbox
+  const handleUseOwnFrameChange = (e) => {
+    const { checked } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      use_own_frame: checked,
+      // When checked, clear and disable the frame pricing fields
+      ...(checked ? {
+        frame_sku: '',
+        frame_price: 0,
+        frame_allowance: 0,
+        frame_discount_percent: 0,
+        final_frame_price: 0
+      } : {})
     }));
   };
 
@@ -300,7 +372,8 @@ function OrderForm() {
       (parseFloat(formData.lens_material_price) || 0) +
       (parseFloat(formData.ar_coating_price) || 0) +
       (parseFloat(formData.blue_light_price) || 0) +
-      (parseFloat(formData.transition_polarized_price) || 0) +
+      (parseFloat(formData.transition_price) || 0) +
+      (parseFloat(formData.polarized_price) || 0) +
       (parseFloat(formData.aspheric_price) || 0) +
       (parseFloat(formData.edge_treatment_price) || 0) +
       (parseFloat(formData.prism_price) || 0) +
@@ -345,28 +418,28 @@ function OrderForm() {
     // Calculate insurance final price (you pay + warranty)
     const insuranceFinalPrice = parseFloat((insuranceYouPay + (parseFloat(formData.warranty_price) || 0)).toFixed(2));
 
-    // ===== BALANCE DUE CALCULATIONS =====
+    // ===== BALANCE CALCULATIONS =====
     const paymentToday = parseFloat(formData.payment_today) || 0;
+    const percentAdjustmentRate = (parseFloat(formData.other_percent_adjustment) || 0) / 100;
 
-    // Calculate other charges that apply to both
-    const percentAdjustmentBase = parseFloat((insuranceFinalPrice - paymentToday) * ((parseFloat(formData.other_percent_adjustment) || 0) / 100)).toFixed(2);
+    // Calculate additional charges (iWellness, Other Charge 1, Other Charge 2)
     const iwellnessFee = parseFloat(formData.iwellness_price) || 0;
     const otherCharge1Price = parseFloat(formData.other_charge_1_price) || 0;
     const otherCharge2Price = parseFloat(formData.other_charge_2_price) || 0;
     const additionalCharges = iwellnessFee + otherCharge1Price + otherCharge2Price;
 
-    // Insurance balance due (default)
-    let balanceDue = insuranceFinalPrice - paymentToday;
-    balanceDue -= parseFloat(percentAdjustmentBase);
-    balanceDue += additionalCharges;
-    balanceDue = parseFloat(balanceDue.toFixed(2));
+    // ===== INSURANCE (With Insurance) BALANCE =====
+    // Percent adjustment is calculated on the final price (before additional charges)
+    const percentAdjustmentInsurance = parseFloat((insuranceFinalPrice * percentAdjustmentRate).toFixed(2));
+    // Total balance = final price - percent discount + additional charges
+    const totalBalanceInsurance = parseFloat((insuranceFinalPrice - percentAdjustmentInsurance + additionalCharges).toFixed(2));
+    // Balance due at pickup = total balance - today's payment
+    const balanceDue = parseFloat((totalBalanceInsurance - paymentToday).toFixed(2));
 
-    // Regular (without insurance) balance due
-    const percentAdjustmentRegular = parseFloat((finalPrice - paymentToday) * ((parseFloat(formData.other_percent_adjustment) || 0) / 100)).toFixed(2);
-    let balanceDueRegular = finalPrice - paymentToday;
-    balanceDueRegular -= parseFloat(percentAdjustmentRegular);
-    balanceDueRegular += additionalCharges;
-    balanceDueRegular = parseFloat(balanceDueRegular.toFixed(2));
+    // ===== REGULAR (Without Insurance) BALANCE =====
+    const percentAdjustmentRegular = parseFloat((finalPrice * percentAdjustmentRate).toFixed(2));
+    const totalBalanceRegular = parseFloat((finalPrice - percentAdjustmentRegular + additionalCharges).toFixed(2));
+    const balanceDueRegular = parseFloat((totalBalanceRegular - paymentToday).toFixed(2));
 
     setFormData(prev => ({
       ...prev,
@@ -382,6 +455,9 @@ function OrderForm() {
       insurance_sales_tax: insuranceSalesTax,
       insurance_you_pay: insuranceYouPay,
       insurance_final_price: insuranceFinalPrice,
+      // Balance fields (includes all Other Charges)
+      total_balance: totalBalanceInsurance,
+      total_balance_regular: totalBalanceRegular,
       balance_due: balanceDue,
       balance_due_regular: balanceDueRegular
     }));
@@ -393,24 +469,11 @@ function OrderForm() {
     const result = await window.electronAPI.createOrder(formData);
 
     if (result.success) {
-      const orderNumber = result.data.order_number;
-      const orderId = result.data.id;
-
-      // Show success message for order creation
-      let successMessage = `Order created successfully! Order Number: ${orderNumber}`;
-
-      // Automatically generate and save PDF
-      const pdfResult = await window.electronAPI.generatePDF(orderId, null);
-
-      if (pdfResult.success) {
-        successMessage += `\n\nPDF saved to: ${pdfResult.data.path}`;
-      } else {
-        successMessage += `\n\nWarning: Order saved but PDF generation failed: ${pdfResult.error}`;
-      }
-
-      alert(successMessage);
-
-      
+      alert(`Order created successfully! Order Number: ${result.data.order_number}`);
+      //call print function
+       handlePrint();
+      // Reset form
+      window.location.reload();
     } else {
       alert(`Error creating order: ${result.error}`);
     }
@@ -559,7 +622,18 @@ function OrderForm() {
 
         {/* Frame Selection Section */}
         <section className="form-section">
-          <h3>Frame Selection</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '10px', borderBottom: '2px solid #3498db', paddingBottom: '8px' }}>
+            <h3 style={{ margin: 0, border: 'none' }}>Frame Selection</h3>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '14px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                name="use_own_frame"
+                checked={formData.use_own_frame}
+                onChange={handleUseOwnFrameChange}
+              />
+              Use own frame
+            </label>
+          </div>
           <div className="form-grid">
             <div className="form-group">
               <label>Frame SKU #</label>
@@ -569,6 +643,7 @@ function OrderForm() {
                 value={formData.frame_sku}
                 onChange={handleInputChange}
                 placeholder="Scan or type SKU"
+                disabled={formData.use_own_frame}
               />
             </div>
 
@@ -609,6 +684,7 @@ function OrderForm() {
                   onChange={handleInputChange}
                   step="0.01"
                   min="0"
+                  disabled={formData.use_own_frame}
                 />
               </div>
 
@@ -622,7 +698,7 @@ function OrderForm() {
                   step="0.01"
                   min="0"
                   placeholder="0.00"
-                  disabled={!formData.frame_price || formData.frame_price === 0}
+                  disabled={formData.use_own_frame || !formData.frame_price || formData.frame_price === 0}
                 />
               </div>
 
@@ -637,7 +713,7 @@ function OrderForm() {
                   min="0"
                   max="100"
                   placeholder="0.00"
-                  disabled={!formData.frame_price || formData.frame_price === 0}
+                  disabled={formData.use_own_frame || !formData.frame_price || formData.frame_price === 0}
                 />
               </div>
 
@@ -691,6 +767,21 @@ function OrderForm() {
                   <span><strong>Final Frame Price:</strong></span>
                   <span className="price"><strong>${parseFloat(formData.final_frame_price || 0).toFixed(2)}</strong></span>
                 </div>
+              </div>
+            )}
+
+            {/* Own Frame Disclosure Message */}
+            {formData.use_own_frame && (
+              <div style={{
+                marginTop: '15px',
+                padding: '12px',
+                backgroundColor: '#fff3cd',
+                border: '1px solid #ffc107',
+                borderRadius: '4px',
+                fontSize: '13px',
+                color: '#856404'
+              }}>
+                <strong>Customer Using Own Frame:</strong> While reasonable care will be exercised in handling the frame, the office assumes no liability for loss or damage to the frame.
               </div>
             )}
           </div>
@@ -967,13 +1058,13 @@ function OrderForm() {
           </div>
 
           <div className="payment-grid">
-            {/* Balance row - shows starting balance before today's payment */}
+            {/* Balance row - shows total balance including all Other Charges */}
             <div className="payment-row">
               <span className="payment-label">Balance:</span>
               <span className="payment-value">
                 ${formData.payment_mode === 'with_insurance'
-                  ? formData.insurance_final_price.toFixed(2)
-                  : formData.final_price.toFixed(2)}
+                  ? formData.total_balance.toFixed(2)
+                  : formData.total_balance_regular.toFixed(2)}
               </span>
             </div>
             {/* Today's Payment input */}
@@ -1014,6 +1105,7 @@ function OrderForm() {
                   <th></th>
                   <th>OD (Right)</th>
                   <th>OS (Left)</th>
+                  <th>Binocular PD</th>
                 </tr>
               </thead>
               <tbody>
@@ -1025,7 +1117,7 @@ function OrderForm() {
                       name="od_pd"
                       value={formData.od_pd}
                       onChange={handleInputChange}
-                      placeholder="e.g., 32"
+                      placeholder="OD PD"
                     />
                   </td>
                   <td>
@@ -1034,7 +1126,16 @@ function OrderForm() {
                       name="os_pd"
                       value={formData.os_pd}
                       onChange={handleInputChange}
-                      placeholder="e.g., 31"
+                      placeholder="OS PD"
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="text"
+                      name="binocular_pd"
+                      value={formData.binocular_pd}
+                      onChange={handleBinocularPdChange}
+                      placeholder="OU PD"
                     />
                   </td>
                 </tr>
@@ -1058,6 +1159,7 @@ function OrderForm() {
                       placeholder="e.g., 18mm"
                     />
                   </td>
+                  <td></td>
                 </tr>
               </tbody>
             </table>
@@ -1075,6 +1177,60 @@ function OrderForm() {
               rows="3"
               placeholder="Enter any special notes or instructions..."
             />
+          </div>
+
+          {/* Service Rating */}
+          <div className="form-group full-width">
+            <label style={{ marginBottom: '8px', display: 'block' }}>
+              On a scale of 1 to 10, 1 being terrible and 10 being amazing, how would you rate your purchase experience?
+            </label>
+            <div className="service-rating-container" style={{
+              display: 'flex',
+              justifyContent: 'flex-start',
+              gap: '8px',
+              marginTop: '8px'
+            }}>
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(rating => (
+                <div key={rating} className="rating-option" style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  minWidth: '35px'
+                }}>
+                  <input
+                    type="radio"
+                    name="service_rating"
+                    id={`rating_${rating}`}
+                    value={rating}
+                    checked={formData.service_rating === String(rating)}
+                    onChange={handleInputChange}
+                    style={{
+                      width: '20px',
+                      height: '20px',
+                      cursor: 'pointer',
+                      accentColor: '#4a90d9'
+                    }}
+                  />
+                  <label
+                    htmlFor={`rating_${rating}`}
+                    style={{
+                      marginTop: '4px',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      fontWeight: rating === 1 || rating === 10 ? 'bold' : 'normal'
+                    }}
+                  >
+                    {rating}
+                  </label>
+                  {rating === 1 && (
+                    <span style={{ fontSize: '10px', color: '#666', marginTop: '2px' }}>Terrible</span>
+                  )}
+                  {rating === 10 && (
+                    <span style={{ fontSize: '10px', color: '#666', marginTop: '2px' }}>Amazing</span>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="form-group">

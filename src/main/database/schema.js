@@ -245,6 +245,56 @@ function runMigrations() {
       migrateVerifiedByData();
     }
 
+    // Migration 12: Split transition_polarized into separate transition and polarized categories
+    const hasTransitionColumn = tableInfo.some(col => col.name === 'transition');
+
+    if (!hasTransitionColumn) {
+      console.log('Migration 12: Adding separate Transition and Polarized categories...');
+
+      // Add new columns to orders table
+      db.prepare(`ALTER TABLE orders ADD COLUMN transition TEXT`).run();
+      db.prepare(`ALTER TABLE orders ADD COLUMN transition_price REAL DEFAULT 0`).run();
+      db.prepare(`ALTER TABLE orders ADD COLUMN polarized TEXT`).run();
+      db.prepare(`ALTER TABLE orders ADD COLUMN polarized_price REAL DEFAULT 0`).run();
+      console.log('✅ Added transition and polarized columns to orders');
+
+      // Add the new lens categories and options
+      splitTransitionPolarizedCategory();
+    }
+
+    // Migration 13: Cleanup - Remove any remaining transition_polarized category
+    const oldTransitionPolarized = db.prepare(`SELECT id FROM lens_categories WHERE category_key = 'transition_polarized'`).get();
+    if (oldTransitionPolarized) {
+      console.log('Migration 13: Removing deprecated transition_polarized category...');
+      db.prepare(`DELETE FROM lens_categories WHERE category_key = 'transition_polarized'`).run();
+      db.prepare(`DELETE FROM dropdown_options WHERE category = 'transition_polarized'`).run();
+      console.log('✅ Removed deprecated transition_polarized category');
+    }
+
+    // Migration 14: Add binocular_pd field for Binocular PD in Prescription Details
+    const hasBinocularPd = tableInfo.some(col => col.name === 'binocular_pd');
+    if (!hasBinocularPd) {
+      console.log('Migration 14: Adding binocular_pd column...');
+      db.prepare(`ALTER TABLE orders ADD COLUMN binocular_pd TEXT`).run();
+      console.log('✅ Added binocular_pd column');
+    }
+
+    // Migration 15: Add use_own_frame field for customer using their own frame
+    const hasUseOwnFrame = tableInfo.some(col => col.name === 'use_own_frame');
+    if (!hasUseOwnFrame) {
+      console.log('Migration 15: Adding use_own_frame column...');
+      db.prepare(`ALTER TABLE orders ADD COLUMN use_own_frame INTEGER DEFAULT 0`).run();
+      console.log('✅ Added use_own_frame column');
+    }
+
+    // Migration 16: Add service_rating field for customer service rating (1-10)
+    const hasServiceRating = tableInfo.some(col => col.name === 'service_rating');
+    if (!hasServiceRating) {
+      console.log('Migration 16: Adding service_rating column...');
+      db.prepare(`ALTER TABLE orders ADD COLUMN service_rating INTEGER`).run();
+      console.log('✅ Added service_rating column');
+    }
+
     console.log('✅ All migrations completed successfully');
   } catch (error) {
     console.error('Migration error:', error);
@@ -297,11 +347,19 @@ function migrateLensDataToJson() {
         };
       }
 
-      if (order.transition_polarized) {
-        lensSelections.transition_polarized = {
-          value: order.transition_polarized,
-          price: order.transition_polarized_price || 0,
-          label: order.transition_polarized
+      if (order.transition) {
+        lensSelections.transition = {
+          value: order.transition,
+          price: order.transition_price || 0,
+          label: order.transition
+        };
+      }
+
+      if (order.polarized) {
+        lensSelections.polarized = {
+          value: order.polarized,
+          price: order.polarized_price || 0,
+          label: order.polarized
         };
       }
 
@@ -431,6 +489,60 @@ function migrateVerifiedByData() {
     console.log(`✅ Migrated ${migratedCount} verified_by values to employee records`);
   } catch (error) {
     console.error('Error migrating verified_by data:', error);
+  }
+}
+
+function splitTransitionPolarizedCategory() {
+  try {
+    console.log('Adding separate Transition and Polarized categories...');
+
+    // Delete the old combined transition_polarized category if it exists
+    db.prepare(`DELETE FROM lens_categories WHERE category_key = 'transition_polarized'`).run();
+    db.prepare(`DELETE FROM dropdown_options WHERE category = 'transition_polarized'`).run();
+    console.log('✅ Removed old transition_polarized category and options');
+
+    // Add new Transition category
+    const transitionExists = db.prepare(`SELECT id FROM lens_categories WHERE category_key = 'transition'`).get();
+    if (!transitionExists) {
+      db.prepare(`INSERT INTO lens_categories (category_key, display_label, sort_order, is_system, is_active) VALUES (?, ?, ?, ?, ?)`).run('transition', 'Transition', 5, 1, 1);
+      console.log('✅ Created Transition category');
+    }
+
+    // Add new Polarized category
+    const polarizedExists = db.prepare(`SELECT id FROM lens_categories WHERE category_key = 'polarized'`).get();
+    if (!polarizedExists) {
+      db.prepare(`INSERT INTO lens_categories (category_key, display_label, sort_order, is_system, is_active) VALUES (?, ?, ?, ?, ?)`).run('polarized', 'Polarized', 6, 1, 1);
+      console.log('✅ Created Polarized category');
+    }
+
+    // Update sort orders for categories after the split
+    db.prepare(`UPDATE lens_categories SET sort_order = 7 WHERE category_key = 'aspheric'`).run();
+    db.prepare(`UPDATE lens_categories SET sort_order = 8 WHERE category_key = 'edge_treatment'`).run();
+    db.prepare(`UPDATE lens_categories SET sort_order = 9 WHERE category_key = 'prism'`).run();
+    db.prepare(`UPDATE lens_categories SET sort_order = 10 WHERE category_key = 'other_option'`).run();
+
+    // Add dropdown options for Transition
+    const transitionOptionsExist = db.prepare(`SELECT id FROM dropdown_options WHERE category = 'transition' LIMIT 1`).get();
+    if (!transitionOptionsExist) {
+      db.prepare(`INSERT INTO dropdown_options (category, label, value, price, sort_order) VALUES (?, ?, ?, ?, ?)`).run('transition', 'None', 'None', 0.00, 0);
+      db.prepare(`INSERT INTO dropdown_options (category, label, value, price, sort_order) VALUES (?, ?, ?, ?, ?)`).run('transition', 'Transition Grey', 'Transition Grey', 125.00, 1);
+      db.prepare(`INSERT INTO dropdown_options (category, label, value, price, sort_order) VALUES (?, ?, ?, ?, ?)`).run('transition', 'Transition Brown', 'Transition Brown', 125.00, 2);
+      db.prepare(`INSERT INTO dropdown_options (category, label, value, price, sort_order) VALUES (?, ?, ?, ?, ?)`).run('transition', 'Transition Blue', 'Transition Blue', 125.00, 3);
+      console.log('✅ Created Transition dropdown options');
+    }
+
+    // Add dropdown options for Polarized
+    const polarizedOptionsExist = db.prepare(`SELECT id FROM dropdown_options WHERE category = 'polarized' LIMIT 1`).get();
+    if (!polarizedOptionsExist) {
+      db.prepare(`INSERT INTO dropdown_options (category, label, value, price, sort_order) VALUES (?, ?, ?, ?, ?)`).run('polarized', 'None', 'None', 0.00, 0);
+      db.prepare(`INSERT INTO dropdown_options (category, label, value, price, sort_order) VALUES (?, ?, ?, ?, ?)`).run('polarized', 'Polarized Grey', 'Polarized Grey', 110.00, 1);
+      db.prepare(`INSERT INTO dropdown_options (category, label, value, price, sort_order) VALUES (?, ?, ?, ?, ?)`).run('polarized', 'Polarized Brown', 'Polarized Brown', 110.00, 2);
+      console.log('✅ Created Polarized dropdown options');
+    }
+
+    console.log('✅ Successfully added separate Transition and Polarized categories');
+  } catch (error) {
+    console.error('Error adding Transition/Polarized categories:', error);
   }
 }
 
@@ -655,15 +767,18 @@ function insertDefaultOptions() {
     // Blue Light Guard
     { category: 'blue_light', label: 'None', value: 'None', price: 0.00, sort_order: 1 },
     { category: 'blue_light', label: 'Add Blue Guard', value: 'Add Blue Guard', price: 40.00, sort_order: 2 },
-    
-    // Transition/Polarized
-    { category: 'transition_polarized', label: 'None', value: 'None', price: 0.00, sort_order: 0 },
-    { category: 'transition_polarized', label: 'Transition Grey', value: 'Transition Grey', price: 125.00, sort_order: 1 },
-    { category: 'transition_polarized', label: 'Transition Brown', value: 'Transition Brown', price: 125.00, sort_order: 2 },
-    { category: 'transition_polarized', label: 'Transition Blue', value: 'Transition Blue', price: 125.00, sort_order: 3 },
-    { category: 'transition_polarized', label: 'Polarized Grey', value: 'Polarized Grey', price: 110.00, sort_order: 4 },
-    { category: 'transition_polarized', label: 'Polarized Brown', value: 'Polarized Brown', price: 110.00, sort_order: 5 },
-    
+
+    // Transition
+    { category: 'transition', label: 'None', value: 'None', price: 0.00, sort_order: 0 },
+    { category: 'transition', label: 'Transition Grey', value: 'Transition Grey', price: 125.00, sort_order: 1 },
+    { category: 'transition', label: 'Transition Brown', value: 'Transition Brown', price: 125.00, sort_order: 2 },
+    { category: 'transition', label: 'Transition Blue', value: 'Transition Blue', price: 125.00, sort_order: 3 },
+
+    // Polarized
+    { category: 'polarized', label: 'None', value: 'None', price: 0.00, sort_order: 0 },
+    { category: 'polarized', label: 'Polarized Grey', value: 'Polarized Grey', price: 110.00, sort_order: 1 },
+    { category: 'polarized', label: 'Polarized Brown', value: 'Polarized Brown', price: 110.00, sort_order: 2 },
+
     // Aspheric
     { category: 'aspheric', label: 'Non-Aspheric', value: 'Non-Aspheric', price: 0.00, sort_order: 1 },
     { category: 'aspheric', label: 'Aspheric', value: 'Aspheric', price: 70.00, sort_order: 2 },
@@ -732,11 +847,12 @@ function insertDefaultLensCategories() {
     { category_key: 'lens_material', display_label: 'Lens Material', sort_order: 2, is_system: 1 },
     { category_key: 'ar_coating', display_label: 'AR Non-Glare Coating', sort_order: 3, is_system: 1 },
     { category_key: 'blue_light', display_label: 'Blue Light Guard', sort_order: 4, is_system: 1 },
-    { category_key: 'transition_polarized', display_label: 'Transition/Polarized', sort_order: 5, is_system: 1 },
-    { category_key: 'aspheric', display_label: 'Aspheric', sort_order: 6, is_system: 1 },
-    { category_key: 'edge_treatment', display_label: 'Edge Treatment', sort_order: 7, is_system: 1 },
-    { category_key: 'prism', display_label: 'Prism', sort_order: 8, is_system: 1 },
-    { category_key: 'other_option', display_label: 'Other Add-Ons', sort_order: 9, is_system: 1 }
+    { category_key: 'transition', display_label: 'Transition', sort_order: 5, is_system: 1 },
+    { category_key: 'polarized', display_label: 'Polarized', sort_order: 6, is_system: 1 },
+    { category_key: 'aspheric', display_label: 'Aspheric', sort_order: 7, is_system: 1 },
+    { category_key: 'edge_treatment', display_label: 'Edge Treatment', sort_order: 8, is_system: 1 },
+    { category_key: 'prism', display_label: 'Prism', sort_order: 9, is_system: 1 },
+    { category_key: 'other_option', display_label: 'Other Add-Ons', sort_order: 10, is_system: 1 }
   ];
 
   insertMany(defaultCategories);

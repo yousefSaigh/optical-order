@@ -53,7 +53,8 @@ function generatePrintHTML(order) {
       { label: 'Lens Material', value: order.lens_material, price: order.lens_material_price },
       { label: 'AR Non-Glare Coating', value: order.ar_coating, price: order.ar_coating_price },
       { label: 'Blue Light Guard', value: order.blue_light, price: order.blue_light_price },
-      { label: 'Transition/Polarized', value: order.transition_polarized, price: order.transition_polarized_price },
+      { label: 'Transition', value: order.transition, price: order.transition_price },
+      { label: 'Polarized', value: order.polarized, price: order.polarized_price },
       { label: 'Aspheric', value: order.aspheric, price: order.aspheric_price },
       { label: 'Edge Treatment', value: order.edge_treatment, price: order.edge_treatment_price },
       { label: 'Prism', value: order.prism, price: order.prism_price },
@@ -104,10 +105,6 @@ function generatePrintHTML(order) {
     `;
   }
 
-  // Calculate other % adjustment amount
-  const baseAmount = (order.final_price || 0) - (order.payment_today || 0);
-  const percentAdjustment = baseAmount * ((order.other_percent_adjustment || 0) / 100);
-
   // Calculate insurance pricing values
   const materialCopay = order.material_copay || order.insurance_copay || 0;
   const insuranceRegularPrice = (order.final_frame_price || 0) + (order.total_lens_insurance_charges || 0);
@@ -118,15 +115,22 @@ function generatePrintHTML(order) {
 
   // Calculate balance due values for payment section
   const paymentToday = order.payment_today || 0;
+  const percentAdjustmentRate = (order.other_percent_adjustment || 0) / 100;
   const additionalCharges = (order.iwellness_price || 0) + (order.other_charge_1_price || 0) + (order.other_charge_2_price || 0);
 
-  // Balance due with insurance
-  const insPercentAdj = (insuranceFinalPrice - paymentToday) * ((order.other_percent_adjustment || 0) / 100);
-  const balanceDueInsurance = insuranceFinalPrice - paymentToday - insPercentAdj + additionalCharges;
+  // NEW FORMULA: percentAdjustment is calculated on finalPrice (not finalPrice - paymentToday)
+  // For display in Other Charges section
+  const percentAdjustment = (order.final_price || 0) * percentAdjustmentRate;
 
-  // Balance due without insurance (regular)
-  const regPercentAdj = ((order.final_price || 0) - paymentToday) * ((order.other_percent_adjustment || 0) / 100);
-  const balanceDueRegular = (order.final_price || 0) - paymentToday - regPercentAdj + additionalCharges;
+  // Insurance: total_balance = insuranceFinalPrice - percentAdjustment + additionalCharges
+  const insPercentAdj = insuranceFinalPrice * percentAdjustmentRate;
+  const totalBalanceInsurance = insuranceFinalPrice - insPercentAdj + additionalCharges;
+  const balanceDueInsurance = totalBalanceInsurance - paymentToday;
+
+  // Regular (without insurance): total_balance = final_price - percentAdjustment + additionalCharges
+  const regPercentAdj = (order.final_price || 0) * percentAdjustmentRate;
+  const totalBalanceRegular = (order.final_price || 0) - regPercentAdj + additionalCharges;
+  const balanceDueRegular = totalBalanceRegular - paymentToday;
 
   const html = `
 <!DOCTYPE html>
@@ -528,6 +532,21 @@ function generatePrintHTML(order) {
   <!-- Frame Information -->
   <div class="section">
     <div class="section-title">Frame Information</div>
+    ${order.use_own_frame ? `
+    <div style="padding: 8px 12px; background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; font-size: 9pt;">
+      <strong>Customer Using Own Frame</strong>
+      <div style="margin-top: 6px; font-size: 8pt; color: #856404;">
+        While reasonable care will be exercised in handling the frame, the office assumes no liability for loss or damage to the frame.
+      </div>
+      ${(order.frame_material || order.frame_name || (order.material_copay && order.material_copay > 0)) ? `
+      <div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid #ffc107; display: flex; gap: 20px; flex-wrap: wrap; font-size: 9pt; color: #333;">
+        ${order.frame_material ? `<div><strong>Material:</strong> ${order.frame_material}</div>` : ''}
+        ${order.frame_name ? `<div><strong>Name/Description:</strong> ${order.frame_name}</div>` : ''}
+        ${order.material_copay && order.material_copay > 0 ? `<div><strong>Material Copay:</strong> ${formatCurrency(order.material_copay)}</div>` : ''}
+      </div>
+      ` : ''}
+    </div>
+    ` : `
     <div class="frame-info-grid">
       <div class="frame-info-field">
         <label>SKU #</label>
@@ -564,6 +583,7 @@ function generatePrintHTML(order) {
       </div>
       ` : ''}
     </div>
+    `}
   </div>
 
   <!-- Lens Information -->
@@ -680,8 +700,8 @@ function generatePrintHTML(order) {
       <tbody>
         <tr>
           <td><strong>Balance:</strong></td>
-          <td style="text-align: right;">${formatCurrency(order.final_price)}</td>
-          <td style="text-align: right; color: #2980b9;">${formatCurrency(insuranceFinalPrice)}</td>
+          <td style="text-align: right;">${formatCurrency(totalBalanceRegular)}</td>
+          <td style="text-align: right; color: #2980b9;">${formatCurrency(totalBalanceInsurance)}</td>
         </tr>
         <tr>
           <td><strong>Today's Payment:</strong></td>
@@ -706,16 +726,19 @@ function generatePrintHTML(order) {
           <th></th>
           <th>OD (Right)</th>
           <th>OS (Left)</th>
+          <th>Binocular PD</th>
         </tr>
         <tr>
           <th>PD</th>
           <td>${order.od_pd || ''}</td>
           <td>${order.os_pd || ''}</td>
+          <td>${order.binocular_pd || ''}</td>
         </tr>
         <tr>
           <th>Seg Height</th>
           <td>${order.od_seg_height || ''}</td>
           <td>${order.os_seg_height || ''}</td>
+          <td></td>
         </tr>
       </table>
       ${order.special_notes ? `
@@ -726,6 +749,15 @@ function generatePrintHTML(order) {
       ` : ''}
     </div>
   </div>
+
+  ${order.service_rating ? `
+  <div class="section">
+    <div class="section-title">Service Rating</div>
+    <div style="font-size: 10pt; padding: 4px 0;">
+      <strong>${order.service_rating}/10</strong>
+    </div>
+  </div>
+  ` : ''}
 
   ${(order.verified_by_employee_name || order.verified_by) ? `
   <div style="margin-top: 12px; font-size: 9pt;">

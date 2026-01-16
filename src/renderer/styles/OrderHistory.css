@@ -396,3 +396,38 @@
   color: #27ae60;
 }
 
+/* Payment Mode Display (Read-Only in Order History) */
+.payment-mode-display {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+}
+
+.payment-mode-display .payment-mode-label {
+  font-weight: 600;
+  color: #34495e;
+  font-size: 0.875rem;
+}
+
+.payment-mode-display .payment-mode-badge {
+  padding: 0.35rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.payment-mode-display .payment-mode-badge.with-insurance {
+  background-color: #e8f5e9;
+  color: #27ae60;
+  border: 2px solid #27ae60;
+}
+
+.payment-mode-display .payment-mode-badge.without-insurance {
+  background-color: #fff3e0;
+  color: #e67e22;
+  border: 2px solid #e67e22;
+}

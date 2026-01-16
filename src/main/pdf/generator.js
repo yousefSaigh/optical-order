@@ -49,40 +49,70 @@ function buildPDFContent(doc, order) {
   // Frame Section - Side-by-side layout (4 columns)
   drawSection(doc, 'Frame Selection');
   doc.fontSize(9);
-  const frameY = doc.y;
-  // Row 1: SKU, Material, Name, Frame Price
-  doc.font('Helvetica-Bold').text('SKU #:', 50, frameY, { continued: true });
-  doc.font('Helvetica').text(` ${order.frame_sku || 'N/A'}`);
-  doc.font('Helvetica-Bold').text('Material:', 170, frameY, { continued: true });
-  doc.font('Helvetica').text(` ${order.frame_material || 'N/A'}`);
-  doc.font('Helvetica-Bold').text('Name:', 290, frameY, { continued: true });
-  doc.font('Helvetica').text(` ${order.frame_name || 'N/A'}`);
-  doc.font('Helvetica-Bold').text('Frame Price:', 450, frameY, { continued: true });
-  doc.font('Helvetica').text(` $${(order.frame_price || 0).toFixed(2)}`);
 
-  // Row 2: Allowance, Discount, Final Price (if applicable)
-  const hasAllowance = order.frame_allowance && order.frame_allowance > 0;
-  const hasDiscount = order.frame_discount_percent && order.frame_discount_percent > 0;
-
-  if (hasAllowance || hasDiscount) {
+  // Check if customer is using their own frame
+  if (order.use_own_frame) {
+    doc.font('Helvetica-Bold').text('Customer Using Own Frame', 50);
+    doc.moveDown(0.3);
+    doc.font('Helvetica').fontSize(8);
+    doc.text('While reasonable care will be exercised in handling the frame, the office assumes no liability for loss or damage to the frame.', 50);
+    doc.fontSize(9);
     doc.moveDown(0.5);
-    const frameRow2Y = doc.y;
+
+    // Show frame details that are still applicable for own frame
+    const ownFrameY = doc.y;
     let xPos = 50;
 
-    if (hasAllowance) {
-      doc.font('Helvetica-Bold').text('Allowance:', xPos, frameRow2Y, { continued: true });
-      doc.font('Helvetica').text(` -$${(order.frame_allowance || 0).toFixed(2)}`);
-      xPos += 140;
+    if (order.frame_material) {
+      doc.font('Helvetica-Bold').text('Material:', xPos, ownFrameY, { continued: true });
+      doc.font('Helvetica').text(` ${order.frame_material}`);
+      xPos += 150;
     }
-    if (hasDiscount) {
-      const afterAllowance = (order.frame_price || 0) - (order.frame_allowance || 0);
-      const discountAmount = afterAllowance * ((order.frame_discount_percent || 0) / 100);
-      doc.font('Helvetica-Bold').text('Discount:', xPos, frameRow2Y, { continued: true });
-      doc.font('Helvetica').text(` ${(order.frame_discount_percent || 0).toFixed(2)}% (-$${discountAmount.toFixed(2)})`);
-      xPos += 160;
+    if (order.frame_name) {
+      doc.font('Helvetica-Bold').text('Name:', xPos, ownFrameY, { continued: true });
+      doc.font('Helvetica').text(` ${order.frame_name}`);
+      xPos += 180;
     }
-    doc.font('Helvetica-Bold').text('Final Price:', xPos, frameRow2Y, { continued: true });
-    doc.font('Helvetica').text(` $${(order.final_frame_price || 0).toFixed(2)}`);
+    if (order.material_copay && order.material_copay > 0) {
+      doc.font('Helvetica-Bold').text('Material Copay:', xPos, ownFrameY, { continued: true });
+      doc.font('Helvetica').text(` $${(order.material_copay || 0).toFixed(2)}`);
+    }
+  } else {
+    const frameY = doc.y;
+    // Row 1: SKU, Material, Name, Frame Price
+    doc.font('Helvetica-Bold').text('SKU #:', 50, frameY, { continued: true });
+    doc.font('Helvetica').text(` ${order.frame_sku || 'N/A'}`);
+    doc.font('Helvetica-Bold').text('Material:', 170, frameY, { continued: true });
+    doc.font('Helvetica').text(` ${order.frame_material || 'N/A'}`);
+    doc.font('Helvetica-Bold').text('Name:', 290, frameY, { continued: true });
+    doc.font('Helvetica').text(` ${order.frame_name || 'N/A'}`);
+    doc.font('Helvetica-Bold').text('Frame Price:', 450, frameY, { continued: true });
+    doc.font('Helvetica').text(` $${(order.frame_price || 0).toFixed(2)}`);
+
+    // Row 2: Allowance, Discount, Final Price (if applicable)
+    const hasAllowance = order.frame_allowance && order.frame_allowance > 0;
+    const hasDiscount = order.frame_discount_percent && order.frame_discount_percent > 0;
+
+    if (hasAllowance || hasDiscount) {
+      doc.moveDown(0.5);
+      const frameRow2Y = doc.y;
+      let xPos = 50;
+
+      if (hasAllowance) {
+        doc.font('Helvetica-Bold').text('Allowance:', xPos, frameRow2Y, { continued: true });
+        doc.font('Helvetica').text(` -$${(order.frame_allowance || 0).toFixed(2)}`);
+        xPos += 140;
+      }
+      if (hasDiscount) {
+        const afterAllowance = (order.frame_price || 0) - (order.frame_allowance || 0);
+        const discountAmount = afterAllowance * ((order.frame_discount_percent || 0) / 100);
+        doc.font('Helvetica-Bold').text('Discount:', xPos, frameRow2Y, { continued: true });
+        doc.font('Helvetica').text(` ${(order.frame_discount_percent || 0).toFixed(2)}% (-$${discountAmount.toFixed(2)})`);
+        xPos += 160;
+      }
+      doc.font('Helvetica-Bold').text('Final Price:', xPos, frameRow2Y, { continued: true });
+      doc.font('Helvetica').text(` $${(order.final_frame_price || 0).toFixed(2)}`);
+    }
   }
 
   doc.moveDown(1);
@@ -135,7 +165,8 @@ function buildPDFContent(doc, order) {
           { label: 'Lens Material', value: order.lens_material, price: order.lens_material_price },
           { label: 'AR Non-Glare Coating', value: order.ar_coating, price: order.ar_coating_price },
           { label: 'Blue Light Guard', value: order.blue_light, price: order.blue_light_price },
-          { label: 'Transition/Polarized', value: order.transition_polarized, price: order.transition_polarized_price },
+          { label: 'Transition', value: order.transition, price: order.transition_price },
+          { label: 'Polarized', value: order.polarized, price: order.polarized_price },
           { label: 'Aspheric', value: order.aspheric, price: order.aspheric_price },
           { label: 'Edge Treatment', value: order.edge_treatment, price: order.edge_treatment_price },
           { label: 'Prism', value: order.prism, price: order.prism_price },
@@ -303,8 +334,8 @@ function buildPDFContent(doc, order) {
         drawSection(doc, 'Other Charges');
 
         if (order.other_percent_adjustment > 0) {
-          const baseAmount = order.final_price - (order.payment_today || 0);
-          const percentAdjustment = baseAmount * (order.other_percent_adjustment / 100);
+          // NEW FORMULA: percentAdjustment is calculated on final_price only (not final_price - paymentToday)
+          const percentAdjustment = (order.final_price || 0) * (order.other_percent_adjustment / 100);
           doc.text(`Other % Adjustment (${order.other_percent_adjustment}%): -$${percentAdjustment.toFixed(2)}`, 50);
           doc.moveDown(0.3);
         }
@@ -340,7 +371,7 @@ function buildPDFContent(doc, order) {
       drawSection(doc, 'Payment');
       doc.fontSize(9);
 
-      // Calculate insurance balance due
+      // Calculate insurance final price
       const paymentMaterialCopay = order.material_copay || order.insurance_copay || 0;
       const paymentInsuranceRegularPrice = (order.final_frame_price || 0) + (order.total_lens_insurance_charges || 0);
       const paymentInsuranceAfterCopay = paymentInsuranceRegularPrice + paymentMaterialCopay;
@@ -349,15 +380,21 @@ function buildPDFContent(doc, order) {
       const paymentInsuranceFinalPrice = paymentInsuranceYouPay + (order.warranty_price || 0);
 
       const paymentToday = order.payment_today || 0;
+      const percentAdjustmentRate = (order.other_percent_adjustment || 0) / 100;
 
-      // Calculate balance due with insurance
-      const paymentPercentAdj = (paymentInsuranceFinalPrice - paymentToday) * ((order.other_percent_adjustment || 0) / 100);
+      // Calculate additional charges (iWellness, Other Charge 1, Other Charge 2)
       const paymentAddCharges = (order.iwellness_price || 0) + (order.other_charge_1_price || 0) + (order.other_charge_2_price || 0);
-      const balanceDueInsurance = paymentInsuranceFinalPrice - paymentToday - paymentPercentAdj + paymentAddCharges;
 
-      // Calculate balance due without insurance
-      const paymentPercentAdjRegular = ((order.final_price || 0) - paymentToday) * ((order.other_percent_adjustment || 0) / 100);
-      const balanceDueRegular = (order.final_price || 0) - paymentToday - paymentPercentAdjRegular + paymentAddCharges;
+      // NEW FORMULA: percentAdjustment is calculated on finalPrice (not finalPrice - paymentToday)
+      // Insurance: total_balance = insuranceFinalPrice - percentAdjustment + additionalCharges
+      const paymentPercentAdjInsurance = paymentInsuranceFinalPrice * percentAdjustmentRate;
+      const totalBalanceInsurance = paymentInsuranceFinalPrice - paymentPercentAdjInsurance + paymentAddCharges;
+      const balanceDueInsurance = totalBalanceInsurance - paymentToday;
+
+      // Regular (without insurance): total_balance = final_price - percentAdjustment + additionalCharges
+      const paymentPercentAdjRegular = (order.final_price || 0) * percentAdjustmentRate;
+      const totalBalanceRegular = (order.final_price || 0) - paymentPercentAdjRegular + paymentAddCharges;
+      const balanceDueRegular = totalBalanceRegular - paymentToday;
 
       // Column positions for payment
       const payColLabel = 50;
@@ -376,11 +413,11 @@ function buildPDFContent(doc, order) {
 
       doc.font('Helvetica').fontSize(9);
 
-      // Balance row (starting balance before today's payment)
+      // Balance row (total balance including all Other Charges)
       const balanceY = doc.y;
       doc.text('Balance:', payColLabel, balanceY);
-      doc.text(`$${(order.final_price || 0).toFixed(2)}`, payColRegular, balanceY, { width: 70, align: 'right' });
-      doc.text(`$${paymentInsuranceFinalPrice.toFixed(2)}`, payColInsurance, balanceY, { width: 70, align: 'right' });
+      doc.text(`$${totalBalanceRegular.toFixed(2)}`, payColRegular, balanceY, { width: 70, align: 'right' });
+      doc.text(`$${totalBalanceInsurance.toFixed(2)}`, payColInsurance, balanceY, { width: 70, align: 'right' });
       doc.moveDown(0.4);
 
       // Today's Payment row
@@ -406,33 +443,45 @@ function buildPDFContent(doc, order) {
       doc.fontSize(10);
       doc.moveDown(0.3);
 
-      // Create simplified prescription table with 3 columns
+      // Create simplified prescription table with 4 columns
       const tableTop = doc.y;
       const col1 = 50;   // Label
       const col2 = 150;  // OD (Right)
       const col3 = 250;  // OS (Left)
+      const col4 = 350;  // Binocular PD
 
       doc.font('Helvetica-Bold');
       doc.text('', col1, tableTop);
       doc.text('OD (Right)', col2, tableTop);
       doc.text('OS (Left)', col3, tableTop);
+      doc.text('Binocular PD', col4, tableTop);
 
       doc.font('Helvetica');
       doc.text('PD', col1, tableTop + 15);
       doc.text(order.od_pd || '', col2, tableTop + 15);
       doc.text(order.os_pd || '', col3, tableTop + 15);
+      doc.text(order.binocular_pd || '', col4, tableTop + 15);
 
       doc.text('Seg Height', col1, tableTop + 30);
       doc.text(order.od_seg_height || '', col2, tableTop + 30);
       doc.text(order.os_seg_height || '', col3, tableTop + 30);
+      // Seg Height row - Binocular PD cell is empty
 
       doc.y = tableTop + 50;
+
       doc.moveDown(0.5);
 
       // Special Notes
       if (order.special_notes) {
         drawSection(doc, 'Special Notes');
         doc.text(order.special_notes, 50);
+        doc.moveDown(0.5);
+      }
+
+      // Service Rating
+      if (order.service_rating) {
+        drawSection(doc, 'Service Rating');
+        doc.text(`${order.service_rating}/10`, 50);
         doc.moveDown(0.5);
       }
 
