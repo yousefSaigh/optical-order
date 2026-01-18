@@ -1,33 +1,83 @@
 const Database = require('better-sqlite3');
 const path = require('path');
-const { app } = require('electron');
+const { app, dialog } = require('electron');
 const fs = require('fs');
 
 let db = null;
+let dbInitError = null;
 
+/**
+ * Get or initialize the database connection
+ * Includes error handling and recovery mechanisms
+ */
 function getDatabase() {
   if (db) return db;
 
-  // Ensure database directory exists
-  const userDataPath = app.getPath('userData');
-  const dbDir = path.join(userDataPath, 'database');
-
-  if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
+  // Check for previous initialization error
+  if (dbInitError) {
+    throw new Error(`Database initialization failed: ${dbInitError.message}`);
   }
 
-  const dbPath = path.join(dbDir, 'optical_orders.db');
-  db = new Database(dbPath);
+  try {
+    // Ensure database directory exists
+    const userDataPath = app.getPath('userData');
+    const dbDir = path.join(userDataPath, 'database');
 
-  // Enable foreign keys
-  db.pragma('foreign_keys = ON');
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true });
+    }
 
-  initializeDatabase();
+    const dbPath = path.join(dbDir, 'optical_orders.db');
 
-  // Run migrations after initialization
-  runMigrations();
+    // Check if database file exists and is accessible
+    if (fs.existsSync(dbPath)) {
+      try {
+        fs.accessSync(dbPath, fs.constants.R_OK | fs.constants.W_OK);
+      } catch (accessError) {
+        throw new Error(`Database file is not accessible: ${accessError.message}`);
+      }
+    }
 
-  return db;
+    db = new Database(dbPath);
+
+    // Enable foreign keys
+    db.pragma('foreign_keys = ON');
+
+    // Enable WAL mode for better crash resistance (Phase 3.1)
+    db.pragma('journal_mode = WAL');
+
+    // Set synchronous mode to NORMAL for balance of safety and performance
+    db.pragma('synchronous = NORMAL');
+
+    // Verify database integrity on startup
+    const integrityCheck = db.pragma('integrity_check');
+    if (integrityCheck[0].integrity_check !== 'ok') {
+      console.error('Database integrity check failed:', integrityCheck);
+      // Don't throw - try to continue, but log the issue
+    }
+
+    initializeDatabase();
+
+    // Run migrations after initialization
+    runMigrations();
+
+    console.log('✅ Database initialized successfully');
+    return db;
+
+  } catch (error) {
+    dbInitError = error;
+    console.error('❌ Database initialization failed:', error);
+
+    // Show error dialog to user (only if app is ready)
+    if (app.isReady()) {
+      dialog.showErrorBox(
+        'Database Error',
+        `Failed to initialize the database:\n\n${error.message}\n\nThe application may not function correctly. Please contact support.`
+      );
+    }
+
+    throw error;
+  }
 }
 
 function runMigrations() {
@@ -295,10 +345,130 @@ function runMigrations() {
       console.log('✅ Added service_rating column');
     }
 
+    // Migration 17: Add deleted_at column for soft delete functionality
+    const hasDeletedAt = tableInfo.some(col => col.name === 'deleted_at');
+    if (!hasDeletedAt) {
+      console.log('Migration 17: Adding deleted_at column for soft delete...');
+      db.prepare(`ALTER TABLE orders ADD COLUMN deleted_at TEXT`).run();
+      console.log('✅ Added deleted_at column');
+    }
+
+    // Migration 18: Add data integrity triggers (skip if already exist)
+    createDataIntegrityTriggers();
+
     console.log('✅ All migrations completed successfully');
   } catch (error) {
     console.error('Migration error:', error);
-    // Don't throw - let the app continue
+    // Log error details but still allow the app to start
+    console.error('The application will continue, but some features may not work correctly.');
+  }
+}
+
+/**
+ * Create triggers for data integrity validation
+ * These enforce constraints that SQLite doesn't support directly
+ */
+function createDataIntegrityTriggers() {
+  try {
+    // Check if triggers already exist
+    const existingTriggers = db.prepare(`
+      SELECT name FROM sqlite_master
+      WHERE type = 'trigger' AND name LIKE 'check_%'
+    `).all();
+
+    if (existingTriggers.length > 0) {
+      console.log('Data integrity triggers already exist, skipping...');
+      return;
+    }
+
+    console.log('Creating data integrity triggers...');
+
+    // Trigger: Validate non-negative prices on INSERT
+    db.prepare(`
+      CREATE TRIGGER IF NOT EXISTS check_order_prices_insert
+      BEFORE INSERT ON orders
+      BEGIN
+        SELECT CASE
+          WHEN NEW.frame_price < 0 THEN RAISE(ABORT, 'Frame price cannot be negative')
+          WHEN NEW.final_price < 0 THEN RAISE(ABORT, 'Final price cannot be negative')
+          WHEN NEW.total_lens_charges < 0 THEN RAISE(ABORT, 'Total lens charges cannot be negative')
+          WHEN NEW.warranty_price < 0 THEN RAISE(ABORT, 'Warranty price cannot be negative')
+        END;
+      END
+    `).run();
+
+    // Trigger: Validate non-negative prices on UPDATE
+    db.prepare(`
+      CREATE TRIGGER IF NOT EXISTS check_order_prices_update
+      BEFORE UPDATE ON orders
+      BEGIN
+        SELECT CASE
+          WHEN NEW.frame_price < 0 THEN RAISE(ABORT, 'Frame price cannot be negative')
+          WHEN NEW.final_price < 0 THEN RAISE(ABORT, 'Final price cannot be negative')
+          WHEN NEW.total_lens_charges < 0 THEN RAISE(ABORT, 'Total lens charges cannot be negative')
+          WHEN NEW.warranty_price < 0 THEN RAISE(ABORT, 'Warranty price cannot be negative')
+        END;
+      END
+    `).run();
+
+    // Trigger: Validate service rating range on INSERT (1-10 or NULL)
+    db.prepare(`
+      CREATE TRIGGER IF NOT EXISTS check_service_rating_insert
+      BEFORE INSERT ON orders
+      WHEN NEW.service_rating IS NOT NULL
+      BEGIN
+        SELECT CASE
+          WHEN NEW.service_rating < 1 OR NEW.service_rating > 10
+          THEN RAISE(ABORT, 'Service rating must be between 1 and 10')
+        END;
+      END
+    `).run();
+
+    // Trigger: Validate service rating range on UPDATE (1-10 or NULL)
+    db.prepare(`
+      CREATE TRIGGER IF NOT EXISTS check_service_rating_update
+      BEFORE UPDATE ON orders
+      WHEN NEW.service_rating IS NOT NULL
+      BEGIN
+        SELECT CASE
+          WHEN NEW.service_rating < 1 OR NEW.service_rating > 10
+          THEN RAISE(ABORT, 'Service rating must be between 1 and 10')
+        END;
+      END
+    `).run();
+
+    // Trigger: Validate percentage fields on INSERT (0-100)
+    db.prepare(`
+      CREATE TRIGGER IF NOT EXISTS check_order_percentages_insert
+      BEFORE INSERT ON orders
+      BEGIN
+        SELECT CASE
+          WHEN NEW.frame_discount_percent < 0 OR NEW.frame_discount_percent > 100
+          THEN RAISE(ABORT, 'Frame discount percent must be between 0 and 100')
+          WHEN NEW.other_percent_adjustment < 0 OR NEW.other_percent_adjustment > 100
+          THEN RAISE(ABORT, 'Other percent adjustment must be between 0 and 100')
+        END;
+      END
+    `).run();
+
+    // Trigger: Validate percentage fields on UPDATE (0-100)
+    db.prepare(`
+      CREATE TRIGGER IF NOT EXISTS check_order_percentages_update
+      BEFORE UPDATE ON orders
+      BEGIN
+        SELECT CASE
+          WHEN NEW.frame_discount_percent < 0 OR NEW.frame_discount_percent > 100
+          THEN RAISE(ABORT, 'Frame discount percent must be between 0 and 100')
+          WHEN NEW.other_percent_adjustment < 0 OR NEW.other_percent_adjustment > 100
+          THEN RAISE(ABORT, 'Other percent adjustment must be between 0 and 100')
+        END;
+      END
+    `).run();
+
+    console.log('✅ Data integrity triggers created successfully');
+  } catch (error) {
+    console.error('Error creating data integrity triggers:', error.message);
+    // Don't fail the migration if triggers can't be created
   }
 }
 
@@ -815,12 +985,7 @@ function insertDefaultOptions() {
 
   insertMany(defaultOptions);
 
-  // Insert default doctors
-  const insertDoctor = db.prepare('INSERT INTO doctors (name) VALUES (?)');
-  const doctors = ['Dr. Smith', 'Dr. Johnson', 'Dr. Williams'];
-  for (const doctor of doctors) {
-    insertDoctor.run(doctor);
-  }
+  // No default doctors - staff will add real doctors in Admin Panel
 
   // Insert default insurance providers
   const insertInsurance = db.prepare('INSERT INTO insurance_providers (name) VALUES (?)');

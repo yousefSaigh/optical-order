@@ -1,4 +1,6 @@
 const { getDatabase } = require('./schema');
+const { validateOrder, sanitizeOrderData, validateSimpleField, validateSettingKey } = require('../validation/orderValidator');
+const { formatError, logError } = require('../utils/errorHandler');
 
 // ============ DROPDOWN OPTIONS ============
 
@@ -244,142 +246,186 @@ function generateOrderNumber() {
   return `ORD-${year}${month}${day}-${random}`;
 }
 
+/**
+ * Create a new order with validation and transaction safety
+ * Uses transaction with retry logic to handle race conditions
+ */
 function createOrder(orderData) {
   const db = getDatabase();
-  
-  // Generate unique order number
-  let orderNumber = generateOrderNumber();
-  while (db.prepare('SELECT id FROM orders WHERE order_number = ?').get(orderNumber)) {
-    orderNumber = generateOrderNumber();
+
+  // Step 1: Validate input
+  const validation = validateOrder(orderData, false);
+  if (!validation.isValid) {
+    const errorMessages = validation.errors.map(e => e.message).join(', ');
+    throw new Error(`Validation failed: ${errorMessages}`);
   }
-  
-  const stmt = db.prepare(`
-    INSERT INTO orders (
-      order_number, patient_name, order_date, doctor_id, account_number, insurance, sold_by, employee_id,
-      od_pd, os_pd, od_seg_height, os_seg_height, binocular_pd,
-      use_own_frame, frame_sku, frame_material, frame_name, frame_formula, frame_price,
-      frame_allowance, frame_discount_percent, final_frame_price,
-      lens_design, lens_design_price, lens_material, lens_material_price,
-      ar_coating, ar_coating_price, blue_light, blue_light_price,
-      transition, transition_price, polarized, polarized_price,
-      aspheric, aspheric_price,
-      edge_treatment, edge_treatment_price, prism, prism_price,
-      other_option, other_option_price,
-      lens_selections_json,
-      total_lens_charges, total_lens_insurance_charges, regular_price, sales_tax, insurance_copay, you_pay, you_saved,
-      warranty_type, warranty_price, final_price,
-      other_charges_adjustment, other_charges_notes,
-      other_percent_adjustment, iwellness, iwellness_price,
-      other_charge_1_type, other_charge_1_price, other_charge_2_type, other_charge_2_price,
-      payment_today, balance_due, balance_due_regular, payment_mode,
-      special_notes, verified_by, verified_by_employee_id, status,
-      service_rating
-    ) VALUES (
-      ?, ?, ?, ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, ?,
-      ?,
-      ?, ?, ?, ?, ?,
-      ?, ?, ?,
-      ?, ?, ?, ?,
-      ?, ?, ?, ?,
-      ?, ?, ?, ?,
-      ?, ?,
-      ?, ?, ?, ?,
-      ?, ?,
-      ?,
-      ?, ?, ?, ?, ?, ?, ?,
-      ?, ?, ?,
-      ?, ?,
-      ?, ?, ?,
-      ?, ?, ?, ?,
-      ?, ?, ?, ?,
-      ?, ?, ?, ?,
-      ?
-    )
-  `);
 
-  const result = stmt.run(
-    orderNumber,
-    orderData.patient_name,
-    orderData.order_date,
-    orderData.doctor_id || null,
-    orderData.account_number || '',
-    orderData.insurance || '',
-    orderData.sold_by || '',
-    orderData.employee_id || null,
-    orderData.od_pd || '',
-    orderData.os_pd || '',
-    orderData.od_seg_height || '',
-    orderData.os_seg_height || '',
-    orderData.binocular_pd || '',
-    orderData.use_own_frame ? 1 : 0,
-    orderData.frame_sku || '',
-    orderData.frame_material || '',
-    orderData.frame_name || '',
-    orderData.frame_formula || '',
-    orderData.frame_price || 0,
-    orderData.frame_allowance || 0,
-    orderData.frame_discount_percent || 0,
-    orderData.final_frame_price || 0,
-    orderData.lens_design || '',
-    orderData.lens_design_price || 0,
-    orderData.lens_material || '',
-    orderData.lens_material_price || 0,
-    orderData.ar_coating || '',
-    orderData.ar_coating_price || 0,
-    orderData.blue_light || '',
-    orderData.blue_light_price || 0,
-    orderData.transition || '',
-    orderData.transition_price || 0,
-    orderData.polarized || '',
-    orderData.polarized_price || 0,
-    orderData.aspheric || '',
-    orderData.aspheric_price || 0,
-    orderData.edge_treatment || '',
-    orderData.edge_treatment_price || 0,
-    orderData.prism || '',
-    orderData.prism_price || 0,
-    orderData.other_option || '',
-    orderData.other_option_price || 0,
-    orderData.lens_selections_json || '{}',
-    orderData.total_lens_charges || 0,
-    orderData.total_lens_insurance_charges || 0,
-    orderData.regular_price || 0,
-    orderData.sales_tax || 0,
-    orderData.material_copay || orderData.insurance_copay || 0,
-    orderData.you_pay || 0,
-    orderData.you_saved || 0,
-    orderData.warranty_type || 'None',
-    orderData.warranty_price || 0,
-    orderData.final_price || 0,
-    orderData.other_charges_adjustment || 0,
-    orderData.other_charges_notes || '',
-    orderData.other_percent_adjustment || 0,
-    orderData.iwellness || 'no',
-    orderData.iwellness_price || 0,
-    orderData.other_charge_1_type || 'none',
-    orderData.other_charge_1_price || 0,
-    orderData.other_charge_2_type || 'none',
-    orderData.other_charge_2_price || 0,
-    orderData.payment_today || 0,
-    orderData.balance_due || 0,
-    orderData.balance_due_regular || 0,
-    orderData.payment_mode || 'with_insurance',
-    orderData.special_notes || '',
-    orderData.verified_by || '',
-    orderData.verified_by_employee_id || null,
-    orderData.status || 'pending',
-    orderData.service_rating || null
-  );
+  // Step 2: Sanitize validated data
+  const data = sanitizeOrderData(validation.value);
 
-  return {
-    id: result.lastInsertRowid,
-    order_number: orderNumber
-  };
+  // Step 3: Use transaction with retry for atomic order creation
+  const MAX_RETRIES = 5;
+  let lastError = null;
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const result = db.transaction(() => {
+        // Generate order number inside transaction
+        let orderNumber = generateOrderNumber();
+
+        // Prepare INSERT statement
+        const stmt = db.prepare(`
+          INSERT INTO orders (
+            order_number, patient_name, order_date, doctor_id, account_number, insurance, sold_by, employee_id,
+            od_pd, os_pd, od_seg_height, os_seg_height, binocular_pd,
+            use_own_frame, frame_sku, frame_material, frame_name, frame_formula, frame_price,
+            frame_allowance, frame_discount_percent, final_frame_price,
+            lens_design, lens_design_price, lens_material, lens_material_price,
+            ar_coating, ar_coating_price, blue_light, blue_light_price,
+            transition, transition_price, polarized, polarized_price,
+            aspheric, aspheric_price,
+            edge_treatment, edge_treatment_price, prism, prism_price,
+            other_option, other_option_price,
+            lens_selections_json,
+            total_lens_charges, total_lens_insurance_charges, regular_price, sales_tax, insurance_copay, you_pay, you_saved,
+            warranty_type, warranty_price, final_price,
+            other_charges_adjustment, other_charges_notes,
+            other_percent_adjustment, iwellness, iwellness_price,
+            other_charge_1_type, other_charge_1_price, other_charge_2_type, other_charge_2_price,
+            payment_today, balance_due, balance_due_regular, payment_mode,
+            special_notes, verified_by, verified_by_employee_id, status,
+            service_rating
+          ) VALUES (
+            ?, ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
+            ?,
+            ?, ?, ?, ?, ?,
+            ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?,
+            ?, ?, ?, ?,
+            ?, ?,
+            ?,
+            ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?,
+            ?, ?,
+            ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?, ?, ?,
+            ?
+          )
+        `);
+
+        const insertResult = stmt.run(
+          orderNumber,
+          data.patient_name,
+          data.order_date,
+          data.doctor_id || null,
+          data.account_number || '',
+          data.insurance || '',
+          data.sold_by || '',
+          data.employee_id || null,
+          data.od_pd || '',
+          data.os_pd || '',
+          data.od_seg_height || '',
+          data.os_seg_height || '',
+          data.binocular_pd || '',
+          data.use_own_frame ? 1 : 0,
+          data.frame_sku || '',
+          data.frame_material || '',
+          data.frame_name || '',
+          data.frame_formula || '',
+          data.frame_price || 0,
+          data.frame_allowance || 0,
+          data.frame_discount_percent || 0,
+          data.final_frame_price || 0,
+          data.lens_design || '',
+          data.lens_design_price || 0,
+          data.lens_material || '',
+          data.lens_material_price || 0,
+          data.ar_coating || '',
+          data.ar_coating_price || 0,
+          data.blue_light || '',
+          data.blue_light_price || 0,
+          data.transition || '',
+          data.transition_price || 0,
+          data.polarized || '',
+          data.polarized_price || 0,
+          data.aspheric || '',
+          data.aspheric_price || 0,
+          data.edge_treatment || '',
+          data.edge_treatment_price || 0,
+          data.prism || '',
+          data.prism_price || 0,
+          data.other_option || '',
+          data.other_option_price || 0,
+          data.lens_selections_json || '{}',
+          data.total_lens_charges || 0,
+          data.total_lens_insurance_charges || 0,
+          data.regular_price || 0,
+          data.sales_tax || 0,
+          data.material_copay || data.insurance_copay || 0,
+          data.you_pay || 0,
+          data.you_saved || 0,
+          data.warranty_type || 'None',
+          data.warranty_price || 0,
+          data.final_price || 0,
+          data.other_charges_adjustment || 0,
+          data.other_charges_notes || '',
+          data.other_percent_adjustment || 0,
+          data.iwellness || 'no',
+          data.iwellness_price || 0,
+          data.other_charge_1_type || 'none',
+          data.other_charge_1_price || 0,
+          data.other_charge_2_type || 'none',
+          data.other_charge_2_price || 0,
+          data.payment_today || 0,
+          data.balance_due || 0,
+          data.balance_due_regular || 0,
+          data.payment_mode || 'with_insurance',
+          data.special_notes || '',
+          data.verified_by || '',
+          data.verified_by_employee_id || null,
+          data.status || 'pending',
+          data.service_rating || null
+        );
+
+        return {
+          id: insertResult.lastInsertRowid,
+          order_number: orderNumber
+        };
+      })();
+
+      // Transaction succeeded
+      return result;
+
+    } catch (error) {
+      lastError = error;
+
+      // Only retry on unique constraint violation (order number collision)
+      if (error.code === 'SQLITE_CONSTRAINT_UNIQUE' &&
+          error.message.includes('order_number') &&
+          attempt < MAX_RETRIES - 1) {
+        console.log(`Order number collision, retrying (attempt ${attempt + 1}/${MAX_RETRIES})...`);
+        continue;
+      }
+
+      // Log and rethrow other errors
+      logError(error, { operation: 'createOrder', attempt });
+      throw error;
+    }
+  }
+
+  // All retries exhausted
+  throw lastError || new Error('Failed to create order after multiple attempts');
 }
 
-function getOrders(limit = 100, offset = 0) {
+function getOrders(limit = 100, offset = 0, includeDeleted = false) {
   const db = getDatabase();
+  const whereClause = includeDeleted ? '' : 'WHERE (o.deleted_at IS NULL OR o.deleted_at = \'\')';
   return db.prepare(`
     SELECT o.*, d.name as doctor_name,
            e.name as employee_name, e.initials as employee_initials,
@@ -388,6 +434,7 @@ function getOrders(limit = 100, offset = 0) {
     LEFT JOIN doctors d ON o.doctor_id = d.id
     LEFT JOIN employees e ON o.employee_id = e.id
     LEFT JOIN employees v ON o.verified_by_employee_id = v.id
+    ${whereClause}
     ORDER BY o.created_at DESC
     LIMIT ? OFFSET ?
   `).all(limit, offset);
@@ -407,9 +454,12 @@ function getOrderById(id) {
   `).get(id);
 }
 
-function searchOrders(searchTerm) {
+function searchOrders(searchTerm, includeDeleted = false) {
   const db = getDatabase();
-  const term = `%${searchTerm}%`;
+  // Escape special LIKE characters to prevent unexpected behavior
+  const escapedTerm = searchTerm.replace(/[%_]/g, '\\$&');
+  const term = `%${escapedTerm}%`;
+  const deleteFilter = includeDeleted ? '' : 'AND (o.deleted_at IS NULL OR o.deleted_at = \'\')';
   return db.prepare(`
     SELECT o.*, d.name as doctor_name,
            e.name as employee_name, e.initials as employee_initials,
@@ -418,19 +468,33 @@ function searchOrders(searchTerm) {
     LEFT JOIN doctors d ON o.doctor_id = d.id
     LEFT JOIN employees e ON o.employee_id = e.id
     LEFT JOIN employees v ON o.verified_by_employee_id = v.id
-    WHERE o.patient_name LIKE ?
-       OR o.order_number LIKE ?
-       OR o.account_number LIKE ?
-       OR e.name LIKE ?
-       OR e.initials LIKE ?
+    WHERE (o.patient_name LIKE ? ESCAPE '\\'
+       OR o.order_number LIKE ? ESCAPE '\\'
+       OR o.account_number LIKE ? ESCAPE '\\'
+       OR e.name LIKE ? ESCAPE '\\'
+       OR e.initials LIKE ? ESCAPE '\\')
+    ${deleteFilter}
     ORDER BY o.created_at DESC
     LIMIT 100
   `).all(term, term, term, term, term);
 }
 
+/**
+ * Update an existing order with validation
+ */
 function updateOrder(id, orderData) {
   const db = getDatabase();
-  // Similar to createOrder but with UPDATE
+
+  // Validate input (isUpdate=true for less strict validation)
+  const validation = validateOrder(orderData, true);
+  if (!validation.isValid) {
+    const errorMessages = validation.errors.map(e => e.message).join(', ');
+    throw new Error(`Validation failed: ${errorMessages}`);
+  }
+
+  // Sanitize validated data
+  const data = sanitizeOrderData(validation.value);
+
   const stmt = db.prepare(`
     UPDATE orders SET
       patient_name = ?, order_date = ?, doctor_id = ?, account_number = ?, insurance = ?, sold_by = ?, employee_id = ?,
@@ -453,41 +517,108 @@ function updateOrder(id, orderData) {
       special_notes = ?, verified_by = ?, verified_by_employee_id = ?, status = ?,
       service_rating = ?,
       updated_at = CURRENT_TIMESTAMP
-    WHERE id = ?
+    WHERE id = ? AND (deleted_at IS NULL OR deleted_at = '')
   `);
 
-  stmt.run(
-    orderData.patient_name, orderData.order_date, orderData.doctor_id, orderData.account_number,
-    orderData.insurance, orderData.sold_by, orderData.employee_id || null,
-    orderData.od_pd, orderData.os_pd, orderData.od_seg_height, orderData.os_seg_height, orderData.binocular_pd || '',
-    orderData.use_own_frame ? 1 : 0, orderData.frame_sku, orderData.frame_material,
-    orderData.frame_name, orderData.frame_formula, orderData.frame_price,
-    orderData.frame_allowance, orderData.frame_discount_percent, orderData.final_frame_price,
-    orderData.lens_design,
-    orderData.lens_design_price, orderData.lens_material, orderData.lens_material_price,
-    orderData.ar_coating, orderData.ar_coating_price, orderData.blue_light, orderData.blue_light_price,
-    orderData.transition, orderData.transition_price,
-    orderData.polarized, orderData.polarized_price,
-    orderData.aspheric,
-    orderData.aspheric_price, orderData.edge_treatment, orderData.edge_treatment_price,
-    orderData.prism, orderData.prism_price, orderData.other_option, orderData.other_option_price,
-    orderData.lens_selections_json || '{}',
-    orderData.total_lens_charges, orderData.total_lens_insurance_charges || 0, orderData.regular_price, orderData.sales_tax, orderData.material_copay || orderData.insurance_copay,
-    orderData.you_pay, orderData.you_saved, orderData.warranty_type || 'None', orderData.warranty_price,
-    orderData.final_price, orderData.other_charges_adjustment, orderData.other_charges_notes,
-    orderData.other_percent_adjustment || 0, orderData.iwellness || 'no', orderData.iwellness_price || 0,
-    orderData.other_charge_1_type || 'none', orderData.other_charge_1_price || 0,
-    orderData.other_charge_2_type || 'none', orderData.other_charge_2_price || 0,
-    orderData.payment_today, orderData.balance_due, orderData.balance_due_regular || 0, orderData.payment_mode || 'with_insurance',
-    orderData.special_notes, orderData.verified_by, orderData.verified_by_employee_id || null,
-    orderData.status || 'pending', orderData.service_rating || null, id
+  const result = stmt.run(
+    data.patient_name, data.order_date, data.doctor_id, data.account_number,
+    data.insurance, data.sold_by, data.employee_id || null,
+    data.od_pd, data.os_pd, data.od_seg_height, data.os_seg_height, data.binocular_pd || '',
+    data.use_own_frame ? 1 : 0, data.frame_sku, data.frame_material,
+    data.frame_name, data.frame_formula, data.frame_price,
+    data.frame_allowance, data.frame_discount_percent, data.final_frame_price,
+    data.lens_design,
+    data.lens_design_price, data.lens_material, data.lens_material_price,
+    data.ar_coating, data.ar_coating_price, data.blue_light, data.blue_light_price,
+    data.transition, data.transition_price,
+    data.polarized, data.polarized_price,
+    data.aspheric,
+    data.aspheric_price, data.edge_treatment, data.edge_treatment_price,
+    data.prism, data.prism_price, data.other_option, data.other_option_price,
+    data.lens_selections_json || '{}',
+    data.total_lens_charges, data.total_lens_insurance_charges || 0, data.regular_price, data.sales_tax, data.material_copay || data.insurance_copay,
+    data.you_pay, data.you_saved, data.warranty_type || 'None', data.warranty_price,
+    data.final_price, data.other_charges_adjustment, data.other_charges_notes,
+    data.other_percent_adjustment || 0, data.iwellness || 'no', data.iwellness_price || 0,
+    data.other_charge_1_type || 'none', data.other_charge_1_price || 0,
+    data.other_charge_2_type || 'none', data.other_charge_2_price || 0,
+    data.payment_today, data.balance_due, data.balance_due_regular || 0, data.payment_mode || 'with_insurance',
+    data.special_notes, data.verified_by, data.verified_by_employee_id || null,
+    data.status || 'pending', data.service_rating || null, id
   );
+
+  if (result.changes === 0) {
+    throw new Error('Order not found or has been deleted');
+  }
 }
 
+/**
+ * Soft delete an order (sets deleted_at timestamp)
+ * Order can be recovered using restoreOrder()
+ */
 function deleteOrder(id) {
   const db = getDatabase();
+  const stmt = db.prepare(`
+    UPDATE orders
+    SET deleted_at = datetime('now'),
+        status = 'deleted',
+        updated_at = datetime('now')
+    WHERE id = ? AND (deleted_at IS NULL OR deleted_at = '')
+  `);
+  const result = stmt.run(id);
+
+  if (result.changes === 0) {
+    throw new Error('Order not found or already deleted');
+  }
+}
+
+/**
+ * Permanently delete an order (use with caution!)
+ */
+function hardDeleteOrder(id) {
+  const db = getDatabase();
   const stmt = db.prepare('DELETE FROM orders WHERE id = ?');
-  stmt.run(id);
+  const result = stmt.run(id);
+
+  if (result.changes === 0) {
+    throw new Error('Order not found');
+  }
+}
+
+/**
+ * Restore a soft-deleted order
+ */
+function restoreOrder(id) {
+  const db = getDatabase();
+  const stmt = db.prepare(`
+    UPDATE orders
+    SET deleted_at = NULL,
+        status = 'pending',
+        updated_at = datetime('now')
+    WHERE id = ? AND deleted_at IS NOT NULL
+  `);
+  const result = stmt.run(id);
+
+  if (result.changes === 0) {
+    throw new Error('Order not found or is not deleted');
+  }
+}
+
+/**
+ * Get deleted orders for recovery purposes
+ */
+function getDeletedOrders(limit = 100) {
+  const db = getDatabase();
+  return db.prepare(`
+    SELECT o.*, d.name as doctor_name,
+           e.name as employee_name, e.initials as employee_initials
+    FROM orders o
+    LEFT JOIN doctors d ON o.doctor_id = d.id
+    LEFT JOIN employees e ON o.employee_id = e.id
+    WHERE o.deleted_at IS NOT NULL AND o.deleted_at != ''
+    ORDER BY o.deleted_at DESC
+    LIMIT ?
+  `).all(limit);
 }
 
 module.exports = {
@@ -535,11 +666,17 @@ module.exports = {
   searchOrders,
   updateOrder,
   deleteOrder,
+  hardDeleteOrder,
+  restoreOrder,
+  getDeletedOrders,
 
   // Settings
   getSetting,
   setSetting,
-  getAllSettings
+  getAllSettings,
+
+  // Validation utilities (re-exported for use in main.js)
+  validateSettingKey
 };
 
 // ============ SETTINGS ============

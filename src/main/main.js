@@ -1,9 +1,23 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, session } = require('electron');
 const path = require('path');
 const { closeDatabase } = require('./database/schema');
 const dbHandlers = require('./database/handlers');
 const { generatePDF } = require('./pdf/generator');
 const { printOrder } = require('./print/printer');
+const { formatError } = require('./utils/errorHandler');
+
+/**
+ * Format error for IPC response with user-friendly message
+ */
+function handleIPCError(error, context = '') {
+  const formatted = formatError(error);
+  console.error(`IPC Error [${context}]:`, formatted.technical);
+  return {
+    success: false,
+    error: formatted.message,
+    code: formatted.code
+  };
+}
 
 let mainWindow;
 
@@ -16,14 +30,17 @@ function createWindow() {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js')
     },
-    icon: path.join(__dirname, '../../assets/icon.png')
+    icon: path.join(__dirname, '../../assets/logo.ico')
   });
 
-  // Load the app
-  if (process.env.NODE_ENV === 'development' || !app.isPackaged) {
+  // Load the app - only check app.isPackaged for production detection
+  // This is the most reliable way to detect production in Electron
+  if (!app.isPackaged) {
+    // Development mode
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
   } else {
+    // Production mode - no DevTools
     mainWindow.loadFile(path.join(__dirname, '../../build/index.html'));
   }
 
@@ -33,8 +50,31 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // Set Content Security Policy for production
+  if (app.isPackaged) {
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [
+            "default-src 'self'; " +
+            "script-src 'self'; " +
+            "style-src 'self' 'unsafe-inline'; " +
+            "img-src 'self' data:; " +
+            "font-src 'self' data:; " +
+            "connect-src 'self'; " +
+            "frame-ancestors 'none';"
+          ]
+        }
+      });
+    });
+  }
+
   createWindow();
   registerIPCHandlers();
+
+  // Create automatic backup on app startup (every day)
+  scheduleAutoBackup();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -42,6 +82,40 @@ app.whenReady().then(() => {
     }
   });
 });
+
+/**
+ * Schedule automatic backups
+ */
+function scheduleAutoBackup() {
+  const backupManager = require('./utils/backupManager');
+  const ONE_DAY = 24 * 60 * 60 * 1000;
+
+  // Check if we need a backup on startup
+  try {
+    const stats = backupManager.getBackupStats();
+    const lastBackup = stats.latestBackup;
+
+    const shouldBackup = !lastBackup ||
+      (new Date() - new Date(lastBackup.created)) > ONE_DAY;
+
+    if (shouldBackup) {
+      console.log('Creating automatic backup...');
+      backupManager.createBackup('scheduled');
+    }
+  } catch (error) {
+    console.error('Error checking backup status:', error);
+  }
+
+  // Schedule daily backup check
+  setInterval(() => {
+    try {
+      console.log('Scheduled backup check...');
+      backupManager.createBackup('scheduled');
+    } catch (error) {
+      console.error('Scheduled backup failed:', error);
+    }
+  }, ONE_DAY);
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -302,7 +376,7 @@ function registerIPCHandlers() {
       const result = dbHandlers.createOrder(orderData);
       return { success: true, data: result };
     } catch (error) {
-      return { success: false, error: error.message };
+      return handleIPCError(error, 'create-order');
     }
   });
 
@@ -310,7 +384,7 @@ function registerIPCHandlers() {
     try {
       return { success: true, data: dbHandlers.getOrders(limit, offset) };
     } catch (error) {
-      return { success: false, error: error.message };
+      return handleIPCError(error, 'get-orders');
     }
   });
 
@@ -318,7 +392,7 @@ function registerIPCHandlers() {
     try {
       return { success: true, data: dbHandlers.getOrderById(id) };
     } catch (error) {
-      return { success: false, error: error.message };
+      return handleIPCError(error, 'get-order-by-id');
     }
   });
 
@@ -326,7 +400,7 @@ function registerIPCHandlers() {
     try {
       return { success: true, data: dbHandlers.searchOrders(searchTerm) };
     } catch (error) {
-      return { success: false, error: error.message };
+      return handleIPCError(error, 'search-orders');
     }
   });
 
@@ -335,7 +409,7 @@ function registerIPCHandlers() {
       dbHandlers.updateOrder(id, orderData);
       return { success: true };
     } catch (error) {
-      return { success: false, error: error.message };
+      return handleIPCError(error, 'update-order');
     }
   });
 
@@ -343,6 +417,35 @@ function registerIPCHandlers() {
     try {
       dbHandlers.deleteOrder(id);
       return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Hard delete order (permanent - use with caution)
+  ipcMain.handle('hard-delete-order', async (event, id) => {
+    try {
+      dbHandlers.hardDeleteOrder(id);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Restore a soft-deleted order
+  ipcMain.handle('restore-order', async (event, id) => {
+    try {
+      dbHandlers.restoreOrder(id);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Get deleted orders for recovery
+  ipcMain.handle('get-deleted-orders', async (event, limit) => {
+    try {
+      return { success: true, data: dbHandlers.getDeletedOrders(limit) };
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -388,6 +491,28 @@ function registerIPCHandlers() {
 
   ipcMain.handle('set-setting', async (event, key, value) => {
     try {
+      // Validate setting key against whitelist
+      if (!dbHandlers.validateSettingKey(key)) {
+        return { success: false, error: `Setting '${key}' is not allowed` };
+      }
+
+      // Additional validation for specific settings
+      if (key === 'pdf_save_location' && value) {
+        const { validatePath } = require('./utils/pathValidator');
+        const pathCheck = validatePath(value);
+        if (!pathCheck.isValid) {
+          return { success: false, error: `Invalid path: ${pathCheck.error}` };
+        }
+        value = pathCheck.resolvedPath;
+      }
+
+      if (key === 'tax_rate' && value !== null && value !== '') {
+        const rate = parseFloat(value);
+        if (isNaN(rate) || rate < 0 || rate > 100) {
+          return { success: false, error: 'Tax rate must be between 0 and 100' };
+        }
+      }
+
       dbHandlers.setSetting(key, value);
       return { success: true };
     } catch (error) {
@@ -420,6 +545,81 @@ function registerIPCHandlers() {
     } catch (error) {
       return { success: false, error: error.message };
     }
+  });
+
+  // ============ BACKUP HANDLERS ============
+  const backupManager = require('./utils/backupManager');
+
+  ipcMain.handle('create-backup', async (event, reason) => {
+    try {
+      const result = backupManager.createBackup(reason || 'manual');
+      return result;
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('list-backups', async () => {
+    try {
+      const backups = backupManager.listBackups();
+      return { success: true, data: backups };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('restore-backup', async (event, backupPath) => {
+    try {
+      // Validate path before restore
+      const { validatePath } = require('./utils/pathValidator');
+      const pathCheck = validatePath(backupPath);
+      if (!pathCheck.isValid) {
+        return { success: false, error: 'Invalid backup path' };
+      }
+
+      const result = backupManager.restoreFromBackup(pathCheck.resolvedPath);
+      return result;
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('delete-backup', async (event, backupPath) => {
+    try {
+      const { validatePath } = require('./utils/pathValidator');
+      const pathCheck = validatePath(backupPath);
+      if (!pathCheck.isValid) {
+        return { success: false, error: 'Invalid backup path' };
+      }
+
+      const result = backupManager.deleteBackup(pathCheck.resolvedPath);
+      return result;
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('get-backup-stats', async () => {
+    try {
+      const stats = backupManager.getBackupStats();
+      return { success: true, data: stats };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // App Version
+  ipcMain.handle('get-app-version', async () => {
+    const packageJson = require('../../package.json');
+    return {
+      success: true,
+      data: {
+        version: packageJson.version,
+        name: packageJson.productName || packageJson.name,
+        electron: process.versions.electron,
+        node: process.versions.node
+      }
+    };
   });
 }
 

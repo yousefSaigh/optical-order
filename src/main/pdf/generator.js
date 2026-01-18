@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
 const { getSetting } = require('../database/handlers');
+const { validatePath, validateFilename, ensureDirectory } = require('../utils/pathValidator');
 
 // Helper function to draw section headers
 function drawSection(doc, title) {
@@ -492,10 +493,16 @@ function buildPDFContent(doc, order) {
   }
 }
 
-// Generate PDF and save to file
+// Generate PDF and save to file with path validation
 function generatePDF(order, savePath) {
   return new Promise((resolve, reject) => {
     try {
+      // Validate order number to prevent path injection via filename
+      const orderNumberValidation = validateFilename(order.order_number || 'unknown');
+      const safeOrderNumber = orderNumberValidation.isValid
+        ? orderNumberValidation.sanitized
+        : `Order_${Date.now()}`;
+
       // If no save path provided, use custom or default location
       if (!savePath) {
         // Check for custom PDF save location in settings
@@ -503,20 +510,43 @@ function generatePDF(order, savePath) {
 
         let ordersDir;
         if (customPath && fs.existsSync(customPath)) {
-          // Use custom path from settings
-          ordersDir = customPath;
+          // Validate custom path before using
+          const customValidation = validatePath(customPath);
+          if (customValidation.isValid) {
+            ordersDir = customValidation.resolvedPath;
+          } else {
+            // Fall back to default if custom path is invalid
+            console.warn('Custom PDF path invalid, using default:', customValidation.error);
+            const documentsPath = app.getPath('documents');
+            ordersDir = path.join(documentsPath, 'OpticalOrders');
+          }
         } else {
           // Use default location
           const documentsPath = app.getPath('documents');
           ordersDir = path.join(documentsPath, 'OpticalOrders');
         }
 
-        // Ensure directory exists
-        if (!fs.existsSync(ordersDir)) {
-          fs.mkdirSync(ordersDir, { recursive: true });
+        // Ensure directory exists and is writable
+        const dirCheck = ensureDirectory(ordersDir);
+        if (!dirCheck.writable) {
+          throw new Error(`Cannot write to directory: ${dirCheck.error}`);
         }
 
-        savePath = path.join(ordersDir, `Order_${order.order_number}.pdf`);
+        savePath = path.join(ordersDir, `Order_${safeOrderNumber}.pdf`);
+      } else {
+        // Validate provided save path to prevent path traversal
+        const pathValidation = validatePath(savePath);
+        if (!pathValidation.isValid) {
+          throw new Error(`Invalid save path: ${pathValidation.error}`);
+        }
+        savePath = pathValidation.resolvedPath;
+
+        // Ensure parent directory exists
+        const parentDir = path.dirname(savePath);
+        const dirCheck = ensureDirectory(parentDir);
+        if (!dirCheck.writable) {
+          throw new Error(`Cannot write to directory: ${dirCheck.error}`);
+        }
       }
 
       const doc = new PDFDocument({ margin: 50, size: 'LETTER' });

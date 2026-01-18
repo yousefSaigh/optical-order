@@ -28,6 +28,7 @@ function AdminPanel() {
   // Settings state
   const [pdfSaveLocation, setPdfSaveLocation] = useState('');
   const [defaultPdfLocation, setDefaultPdfLocation] = useState('');
+  const [appVersion, setAppVersion] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -360,6 +361,12 @@ function AdminPanel() {
         const defaultPath = 'C:\\Users\\Owner\\Documents\\OpticalOrders';
         setPdfSaveLocation('');
         setDefaultPdfLocation(defaultPath);
+      }
+
+      // Get app version info
+      const versionResult = await window.electronAPI.getAppVersion();
+      if (versionResult.success) {
+        setAppVersion(versionResult.data);
       }
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -1040,6 +1047,27 @@ function AdminPanel() {
                 <li>The folder will be created automatically if it doesn't exist</li>
                 <li>Existing PDFs will remain in their current location</li>
               </ul>
+            </div>
+          </div>
+
+          {/* Application Info Section */}
+          <div className="settings-section">
+            <h4>Application Information</h4>
+            <div className="app-info-card">
+              <div className="app-info-header">
+                <h3>Optical Order Manager</h3>
+              </div>
+              <div className="app-info-details">
+                {appVersion && (
+                  <>
+                    <div className="info-row">
+                      <span className="info-label">Version:</span>
+                      <span className="info-value">{appVersion.version}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+              <p className="copyright-text">© 2024 Quality Eye Clinic. All rights reserved.</p>
             </div>
           </div>
         </div>

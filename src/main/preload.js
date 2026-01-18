@@ -47,7 +47,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   searchOrders: (searchTerm) => ipcRenderer.invoke('search-orders', searchTerm),
   updateOrder: (id, orderData) => ipcRenderer.invoke('update-order', id, orderData),
   deleteOrder: (id) => ipcRenderer.invoke('delete-order', id),
-  
+
+  // Order Recovery (soft delete)
+  hardDeleteOrder: (id) => ipcRenderer.invoke('hard-delete-order', id),
+  restoreOrder: (id) => ipcRenderer.invoke('restore-order', id),
+  getDeletedOrders: (limit) => ipcRenderer.invoke('get-deleted-orders', limit),
+
   // PDF & Print
   generatePDF: (orderId, savePath) => ipcRenderer.invoke('generate-pdf', orderId, savePath),
   printOrder: (orderId) => ipcRenderer.invoke('print-order', orderId),
@@ -56,6 +61,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSetting: (key) => ipcRenderer.invoke('get-setting', key),
   setSetting: (key, value) => ipcRenderer.invoke('set-setting', key, value),
   getAllSettings: () => ipcRenderer.invoke('get-all-settings'),
-  selectDirectory: () => ipcRenderer.invoke('select-directory')
+  selectDirectory: () => ipcRenderer.invoke('select-directory'),
+
+  // Backup Management
+  createBackup: (reason) => ipcRenderer.invoke('create-backup', reason),
+  listBackups: () => ipcRenderer.invoke('list-backups'),
+  restoreBackup: (backupPath) => ipcRenderer.invoke('restore-backup', backupPath),
+  deleteBackup: (backupPath) => ipcRenderer.invoke('delete-backup', backupPath),
+  getBackupStats: () => ipcRenderer.invoke('get-backup-stats'),
+
+  // App Info
+  getAppVersion: () => ipcRenderer.invoke('get-app-version')
 });
 

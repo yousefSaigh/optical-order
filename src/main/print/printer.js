@@ -3,10 +3,48 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 
-// Helper function to format currency
+/**
+ * Escape HTML special characters to prevent XSS/injection
+ * @param {*} text - The text to escape
+ * @returns {string} - HTML-safe string
+ */
+function escapeHtml(text) {
+  if (text === null || text === undefined) {
+    return '';
+  }
+  const str = String(text);
+  const escapeMap = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;',
+    '/': '&#x2F;',
+    '`': '&#x60;',
+    '=': '&#x3D;'
+  };
+  return str.replace(/[&<>"'`=/]/g, char => escapeMap[char]);
+}
+
+/**
+ * Safe format currency with HTML escaping
+ */
 function formatCurrency(value) {
   const num = parseFloat(value) || 0;
   return `$${num.toFixed(2)}`;
+}
+
+/**
+ * Safely escape and format a field value
+ * @param {*} value - The value to format
+ * @param {string} defaultValue - Default value if empty
+ * @returns {string} - HTML-safe string
+ */
+function safeValue(value, defaultValue = '') {
+  if (value === null || value === undefined || value === '') {
+    return escapeHtml(defaultValue);
+  }
+  return escapeHtml(value);
 }
 
 // Helper function to generate HTML content for printing
@@ -87,8 +125,8 @@ function generatePrintHTML(order) {
         <tbody>
           ${lensItems.map(item => `
             <tr>
-              <td class="lens-category">${item.label}</td>
-              <td class="lens-selection">${item.value}</td>
+              <td class="lens-category">${escapeHtml(item.label)}</td>
+              <td class="lens-selection">${escapeHtml(item.value)}</td>
               <td class="lens-price">${formatCurrency(item.price)}</td>
               <td class="lens-price insurance">${formatCurrency(item.insurance_price)}</td>
             </tr>
@@ -494,8 +532,8 @@ function generatePrintHTML(order) {
   </div>
 
   <div class="order-info">
-    <div><strong>Order Number:</strong> ${order.order_number}</div>
-    <div><strong>Date:</strong> ${order.order_date}</div>
+    <div><strong>Order Number:</strong> ${escapeHtml(order.order_number)}</div>
+    <div><strong>Date:</strong> ${escapeHtml(order.order_date)}</div>
   </div>
 
   <!-- Patient Information -->
@@ -504,27 +542,27 @@ function generatePrintHTML(order) {
     <div class="patient-info-grid">
       <div class="patient-info-field">
         <label>Patient Name</label>
-        <div class="value">${order.patient_name || ''}</div>
+        <div class="value">${escapeHtml(order.patient_name || '')}</div>
       </div>
       <div class="patient-info-field">
         <label>Date</label>
-        <div class="value">${order.order_date || ''}</div>
+        <div class="value">${escapeHtml(order.order_date || '')}</div>
       </div>
       <div class="patient-info-field">
         <label>Doctor</label>
-        <div class="value">${order.doctor_name || ''}</div>
+        <div class="value">${escapeHtml(order.doctor_name || '')}</div>
       </div>
       <div class="patient-info-field">
         <label>Account Number</label>
-        <div class="value">${order.account_number || ''}</div>
+        <div class="value">${escapeHtml(order.account_number || '')}</div>
       </div>
       <div class="patient-info-field">
         <label>Insurance</label>
-        <div class="value">${order.insurance || ''}</div>
+        <div class="value">${escapeHtml(order.insurance || '')}</div>
       </div>
       <div class="patient-info-field">
         <label>Sold By</label>
-        <div class="value">${order.employee_name || order.sold_by || ''}</div>
+        <div class="value">${escapeHtml(order.employee_name || order.sold_by || '')}</div>
       </div>
     </div>
   </div>
@@ -540,8 +578,8 @@ function generatePrintHTML(order) {
       </div>
       ${(order.frame_material || order.frame_name || (order.material_copay && order.material_copay > 0)) ? `
       <div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid #ffc107; display: flex; gap: 20px; flex-wrap: wrap; font-size: 9pt; color: #333;">
-        ${order.frame_material ? `<div><strong>Material:</strong> ${order.frame_material}</div>` : ''}
-        ${order.frame_name ? `<div><strong>Name/Description:</strong> ${order.frame_name}</div>` : ''}
+        ${order.frame_material ? `<div><strong>Material:</strong> ${escapeHtml(order.frame_material)}</div>` : ''}
+        ${order.frame_name ? `<div><strong>Name/Description:</strong> ${escapeHtml(order.frame_name)}</div>` : ''}
         ${order.material_copay && order.material_copay > 0 ? `<div><strong>Material Copay:</strong> ${formatCurrency(order.material_copay)}</div>` : ''}
       </div>
       ` : ''}
@@ -550,15 +588,15 @@ function generatePrintHTML(order) {
     <div class="frame-info-grid">
       <div class="frame-info-field">
         <label>SKU #</label>
-        <div class="value">${order.frame_sku || ''}</div>
+        <div class="value">${escapeHtml(order.frame_sku || '')}</div>
       </div>
       <div class="frame-info-field">
         <label>Material</label>
-        <div class="value">${order.frame_material || ''}</div>
+        <div class="value">${escapeHtml(order.frame_material || '')}</div>
       </div>
       <div class="frame-info-field">
         <label>Name/Description</label>
-        <div class="value">${order.frame_name || ''}</div>
+        <div class="value">${escapeHtml(order.frame_name || '')}</div>
       </div>
       <div class="frame-info-field">
         <label>Frame Price</label>
@@ -730,21 +768,21 @@ function generatePrintHTML(order) {
         </tr>
         <tr>
           <th>PD</th>
-          <td>${order.od_pd || ''}</td>
-          <td>${order.os_pd || ''}</td>
-          <td>${order.binocular_pd || ''}</td>
+          <td>${escapeHtml(order.od_pd || '')}</td>
+          <td>${escapeHtml(order.os_pd || '')}</td>
+          <td>${escapeHtml(order.binocular_pd || '')}</td>
         </tr>
         <tr>
           <th>Seg Height</th>
-          <td>${order.od_seg_height || ''}</td>
-          <td>${order.os_seg_height || ''}</td>
+          <td>${escapeHtml(order.od_seg_height || '')}</td>
+          <td>${escapeHtml(order.os_seg_height || '')}</td>
           <td></td>
         </tr>
       </table>
       ${order.special_notes ? `
       <div class="special-notes-inline">
         <div class="notes-label">Special Notes:</div>
-        <div>${order.special_notes}</div>
+        <div>${escapeHtml(order.special_notes)}</div>
       </div>
       ` : ''}
     </div>
@@ -754,14 +792,14 @@ function generatePrintHTML(order) {
   <div class="section">
     <div class="section-title">Service Rating</div>
     <div style="font-size: 10pt; padding: 4px 0;">
-      <strong>${order.service_rating}/10</strong>
+      <strong>${escapeHtml(order.service_rating)}/10</strong>
     </div>
   </div>
   ` : ''}
 
   ${(order.verified_by_employee_name || order.verified_by) ? `
   <div style="margin-top: 12px; font-size: 9pt;">
-    <strong>Verified By:</strong> ${order.verified_by_employee_name || order.verified_by}
+    <strong>Verified By:</strong> ${escapeHtml(order.verified_by_employee_name || order.verified_by)}
   </div>
   ` : ''}
 </body>
