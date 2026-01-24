@@ -1,13 +1,11 @@
-import React, { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+import React from 'react';
+import { HashRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import OrderForm from './pages/OrderForm';
 import OrderHistory from './pages/OrderHistory';
 import AdminPanel from './pages/AdminPanel';
 import './styles/App.css';
 
 function App() {
-  const [currentPage, setCurrentPage] = useState('order');
-
   return (
     <Router>
       <div className="app">
@@ -25,6 +23,7 @@ function App() {
         <main className="main-content">
           <Routes>
             <Route path="/" element={<OrderForm />} />
+            <Route path="/edit/:orderId" element={<OrderForm />} />
             <Route path="/history" element={<OrderHistory />} />
             <Route path="/admin" element={<AdminPanel />} />
           </Routes>

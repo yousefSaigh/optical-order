@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import '../styles/OrderHistory.css';
 
 function OrderHistory() {
+  const navigate = useNavigate();
+
   const [orders, setOrders] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -65,6 +68,10 @@ function OrderHistory() {
         alert(`Error deleting order: ${result.error}`);
       }
     }
+  };
+
+  const handleEdit = (orderId) => {
+    navigate(`/edit/${orderId}`);
   };
 
   const formatDate = (dateString) => {
@@ -203,6 +210,13 @@ function OrderHistory() {
                       title="View Details"
                     >
                       👁️
+                    </button>
+                    <button
+                      onClick={() => handleEdit(order.id)}
+                      className="btn-icon"
+                      title="Edit Order"
+                    >
+                      ✏️
                     </button>
                     <button
                       onClick={() => handlePrint(order.id)}
@@ -572,7 +586,10 @@ function OrderHistory() {
             </div>
 
             <div className="modal-footer">
-              <button onClick={() => handlePrint(selectedOrder.id)} className="btn btn-primary">
+              <button onClick={() => handleEdit(selectedOrder.id)} className="btn btn-primary">
+                Edit Order
+              </button>
+              <button onClick={() => handlePrint(selectedOrder.id)} className="btn btn-secondary">
                 Print Order
               </button>
               <button onClick={() => handleGeneratePDF(selectedOrder.id)} className="btn btn-secondary">

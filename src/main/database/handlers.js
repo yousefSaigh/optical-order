@@ -237,13 +237,41 @@ function toggleLensCategoryActive(id) {
 
 // ============ ORDERS ============
 
-function generateOrderNumber() {
+/**
+ * Generate order number in format: LASTNAME-ACCT-YYYYMMDD-XXXX
+ * @param {Object} orderData - The order data containing patient_name and account_number
+ * @returns {string} - Generated order number
+ */
+function generateOrderNumber(orderData) {
   const date = new Date();
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-  return `ORD-${year}${month}${day}-${random}`;
+  const dateStr = `${year}${month}${day}`;
+
+  // Extract last name from patient name (last word, uppercase, sanitized)
+  let lastName = 'UNKNOWN';
+  if (orderData.patient_name && orderData.patient_name.trim()) {
+    const nameParts = orderData.patient_name.trim().split(/\s+/);
+    const rawLastName = nameParts[nameParts.length - 1];
+    // Sanitize: remove special characters, keep only letters and numbers
+    lastName = rawLastName.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() || 'UNKNOWN';
+  }
+
+  // Extract account number (sanitized)
+  let acct = '';
+  if (orderData.account_number && orderData.account_number.trim()) {
+    // Sanitize: remove special characters except alphanumeric
+    acct = orderData.account_number.trim().replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  }
+
+  // Build order number: LASTNAME-ACCT-YYYYMMDD-XXXX or LASTNAME-YYYYMMDD-XXXX if no account
+  if (acct) {
+    return `${lastName}-${acct}-${dateStr}-${random}`;
+  } else {
+    return `${lastName}-${dateStr}-${random}`;
+  }
 }
 
 /**
@@ -270,8 +298,8 @@ function createOrder(orderData) {
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
       const result = db.transaction(() => {
-        // Generate order number inside transaction
-        let orderNumber = generateOrderNumber();
+        // Generate order number inside transaction (pass data for patient name and account)
+        let orderNumber = generateOrderNumber(data);
 
         // Prepare INSERT statement
         const stmt = db.prepare(`

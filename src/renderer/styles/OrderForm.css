@@ -455,6 +455,29 @@
   min-height: 40px;
 }
 
+/* Header row and dual-column rows for % adjustment */
+.charge-row.charge-header,
+.charge-row.charge-row-dual {
+  grid-template-columns: 2fr 1.5fr 1fr 1fr;
+}
+
+.charge-row.charge-header {
+  background-color: #f8f9fa;
+  min-height: 32px;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.charge-row.charge-header .charge-amount {
+  background-color: #f8f9fa;
+  justify-content: flex-end;
+  color: #555;
+}
+
+.charge-row.charge-header .charge-amount.insurance {
+  color: #e67e22;
+}
+
 .charge-row:last-child {
   border-bottom: none;
 }
@@ -484,6 +507,16 @@
   justify-content: flex-end;
   font-weight: 600;
   background-color: white;
+  border-right: 1px solid #ddd;
+}
+
+.charge-amount:last-child {
+  border-right: none;
+}
+
+.charge-amount.insurance {
+  color: #e67e22;
+  background-color: #fef9f3;
 }
 
 .percent-input {

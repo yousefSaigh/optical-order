@@ -18,11 +18,17 @@ const optionalPositiveNumber = Joi.alternatives().try(
   Joi.string().empty('').default(null)
 ).allow(null, '');
 
-// Price field - must be non-negative, defaults to 0
-const priceField = Joi.number().min(0).max(999999.99).default(0);
+// Price field - must be non-negative, defaults to 0, allows empty strings
+const priceField = Joi.alternatives().try(
+  Joi.number().min(0).max(999999.99),
+  Joi.string().empty('').default(0)
+).default(0);
 
-// Percentage field - 0-100
-const percentField = Joi.number().min(0).max(100).default(0);
+// Percentage field - 0-100, allows empty strings
+const percentField = Joi.alternatives().try(
+  Joi.number().min(0).max(100),
+  Joi.string().empty('').default(0)
+).default(0);
 
 // PD (Pupillary Distance) field - typically 20-45mm per eye
 const pdField = Joi.alternatives().try(
@@ -147,7 +153,10 @@ const orderSchema = Joi.object({
   final_price: priceField,
 
   // Other charges
-  other_charges_adjustment: Joi.number().min(-99999).max(99999).default(0),
+  other_charges_adjustment: Joi.alternatives().try(
+    Joi.number().min(-99999).max(99999),
+    Joi.string().empty('').default(0)
+  ).default(0),
   other_charges_notes: Joi.string().max(500).allow('', null).default(''),
   other_percent_adjustment: percentField,
   iwellness: Joi.string().valid('yes', 'no').default('no'),
@@ -161,8 +170,14 @@ const orderSchema = Joi.object({
 
   // Payment
   payment_today: priceField,
-  balance_due: Joi.number().min(-99999).max(999999).default(0),
-  balance_due_regular: Joi.number().min(-99999).max(999999).default(0),
+  balance_due: Joi.alternatives().try(
+    Joi.number().min(-99999).max(999999),
+    Joi.string().empty('').default(0)
+  ).default(0),
+  balance_due_regular: Joi.alternatives().try(
+    Joi.number().min(-99999).max(999999),
+    Joi.string().empty('').default(0)
+  ).default(0),
   payment_mode: Joi.string().valid('with_insurance', 'without_insurance').default('with_insurance'),
 
   // Notes and status

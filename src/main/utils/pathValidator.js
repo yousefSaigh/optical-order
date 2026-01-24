@@ -24,12 +24,21 @@ function getAllowedDirectories() {
 }
 
 /**
- * Validate that a path is within allowed directories
+ * Validate that a path is safe for file operations
  * @param {string} inputPath - The path to validate
- * @param {string[]} additionalAllowed - Additional allowed base paths
+ * @param {Object} options - Validation options
+ * @param {boolean} options.restrictToAllowed - If true, restrict to allowed directories (default: false)
+ * @param {string[]} options.additionalAllowed - Additional allowed base paths
  * @returns {Object} - { isValid, resolvedPath, error }
  */
-function validatePath(inputPath, additionalAllowed = []) {
+function validatePath(inputPath, options = {}) {
+  // Handle legacy call signature: validatePath(path, additionalAllowed[])
+  if (Array.isArray(options)) {
+    options = { additionalAllowed: options, restrictToAllowed: true };
+  }
+
+  const { restrictToAllowed = false, additionalAllowed = [] } = options;
+
   if (!inputPath || typeof inputPath !== 'string') {
     return {
       isValid: false,
@@ -41,8 +50,8 @@ function validatePath(inputPath, additionalAllowed = []) {
   try {
     // Normalize and resolve the path
     const resolved = path.resolve(inputPath);
-    
-    // Check for path traversal attempts
+
+    // Check for path traversal attempts in the original input
     const normalized = path.normalize(inputPath);
     if (normalized.includes('..')) {
       return {
@@ -52,23 +61,39 @@ function validatePath(inputPath, additionalAllowed = []) {
       };
     }
 
-    // Get allowed directories
-    const allowed = [...getAllowedDirectories(), ...additionalAllowed];
-    
-    // Check if the resolved path is within any allowed directory
-    const isAllowed = allowed.some(allowedDir => {
-      if (!allowedDir) return false;
-      const resolvedAllowed = path.resolve(allowedDir);
-      return resolved.startsWith(resolvedAllowed + path.sep) || 
-             resolved === resolvedAllowed;
-    });
+    // Only restrict to allowed directories if explicitly requested
+    if (restrictToAllowed) {
+      // Get allowed directories
+      const allowed = [...getAllowedDirectories(), ...additionalAllowed];
 
-    if (!isAllowed) {
-      return {
-        isValid: false,
-        resolvedPath: null,
-        error: 'Path must be within allowed directories (Documents, Downloads, Desktop, or App Data)'
-      };
+      // Check if the resolved path is within any allowed directory
+      const isAllowed = allowed.some(allowedDir => {
+        if (!allowedDir) return false;
+        const resolvedAllowed = path.resolve(allowedDir);
+        return resolved.startsWith(resolvedAllowed + path.sep) ||
+               resolved === resolvedAllowed;
+      });
+
+      if (!isAllowed) {
+        return {
+          isValid: false,
+          resolvedPath: null,
+          error: 'Path must be within allowed directories (Documents, Downloads, Desktop, or App Data)'
+        };
+      }
+    }
+
+    // Verify the path exists or can be created
+    if (!fs.existsSync(resolved)) {
+      // Check if parent directory exists (for new directories)
+      const parentDir = path.dirname(resolved);
+      if (!fs.existsSync(parentDir)) {
+        return {
+          isValid: false,
+          resolvedPath: null,
+          error: 'Parent directory does not exist'
+        };
+      }
     }
 
     return {

@@ -1,7 +1,16 @@
 import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import '../styles/OrderForm.css';
 
 function OrderForm() {
+  const { orderId } = useParams();
+  const navigate = useNavigate();
+
+  // Edit mode state
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editOrderId, setEditOrderId] = useState(null);
+  const [originalOrderNumber, setOriginalOrderNumber] = useState('');
+
   const [doctors, setDoctors] = useState([]);
   const [insuranceProviders, setInsuranceProviders] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -34,9 +43,9 @@ function OrderForm() {
     frame_material: '',
     frame_name: '',
     frame_formula: '',
-    frame_price: 0,
-    frame_allowance: 0,
-    frame_discount_percent: 0,
+    frame_price: '',
+    frame_allowance: '',
+    frame_discount_percent: '',
     final_frame_price: 0,
     
     // Lens Information
@@ -66,7 +75,7 @@ function OrderForm() {
     total_lens_insurance_charges: 0,
     regular_price: 0,
     sales_tax: 0,
-    material_copay: 0,
+    material_copay: '',
     you_pay: 0,
     you_saved: 0,
 
@@ -82,16 +91,18 @@ function OrderForm() {
     final_price: 0,
     
     // Other
-    other_charges_adjustment: 0,
+    other_charges_adjustment: '',
     other_charges_notes: '',
-    other_percent_adjustment: 0,
+    other_percent_adjustment: '',
+    percent_adjustment_regular: 0,
+    percent_adjustment_insurance: 0,
     iwellness: 'no',
     iwellness_price: 0,
     other_charge_1_type: 'none',
-    other_charge_1_price: 0,
+    other_charge_1_price: '',
     other_charge_2_type: 'none',
-    other_charge_2_price: 0,
-    payment_today: 0,
+    other_charge_2_price: '',
+    payment_today: '',
     // Balance fields (includes all Other Charges)
     total_balance: 0,
     total_balance_regular: 0,
@@ -112,6 +123,127 @@ function OrderForm() {
     loadDropdownOptions();
     loadLensCategories();
   }, []);
+
+  // Load order data when in edit mode
+  useEffect(() => {
+    if (orderId) {
+      loadOrderForEdit(orderId);
+    }
+  }, [orderId]);
+
+  const loadOrderForEdit = async (id) => {
+    try {
+      const result = await window.electronAPI.getOrderById(parseInt(id));
+      if (result.success && result.data) {
+        const order = result.data;
+        setIsEditMode(true);
+        setEditOrderId(parseInt(id));
+        setOriginalOrderNumber(order.order_number);
+
+        // Parse lens_selections_json if it exists
+        let parsedLensSelections = {};
+        if (order.lens_selections_json) {
+          try {
+            parsedLensSelections = typeof order.lens_selections_json === 'string'
+              ? JSON.parse(order.lens_selections_json)
+              : order.lens_selections_json;
+          } catch (e) {
+            console.error('Error parsing lens_selections_json:', e);
+          }
+        }
+        setLensSelections(parsedLensSelections);
+
+        // Populate formData with order data
+        setFormData(prev => ({
+          ...prev,
+          patient_name: order.patient_name || '',
+          order_date: order.order_date || new Date().toISOString().split('T')[0],
+          doctor_id: order.doctor_id || '',
+          account_number: order.account_number || '',
+          insurance: order.insurance || '',
+          employee_id: order.employee_id || '',
+          sold_by: order.sold_by || '',
+          od_pd: order.od_pd || '',
+          os_pd: order.os_pd || '',
+          od_seg_height: order.od_seg_height || '',
+          os_seg_height: order.os_seg_height || '',
+          binocular_pd: order.binocular_pd || '',
+          use_own_frame: order.use_own_frame || false,
+          frame_sku: order.frame_sku || '',
+          frame_material: order.frame_material || '',
+          frame_name: order.frame_name || '',
+          frame_formula: order.frame_formula || '',
+          frame_price: order.frame_price || '',
+          frame_allowance: order.frame_allowance || '',
+          frame_discount_percent: order.frame_discount_percent || '',
+          final_frame_price: order.final_frame_price || 0,
+          lens_design: order.lens_design || '',
+          lens_design_price: order.lens_design_price || 0,
+          lens_material: order.lens_material || '',
+          lens_material_price: order.lens_material_price || 0,
+          ar_coating: order.ar_coating || '',
+          ar_coating_price: order.ar_coating_price || 0,
+          blue_light: order.blue_light || '',
+          blue_light_price: order.blue_light_price || 0,
+          transition: order.transition || '',
+          transition_price: order.transition_price || 0,
+          polarized: order.polarized || '',
+          polarized_price: order.polarized_price || 0,
+          aspheric: order.aspheric || '',
+          aspheric_price: order.aspheric_price || 0,
+          edge_treatment: order.edge_treatment || '',
+          edge_treatment_price: order.edge_treatment_price || 0,
+          prism: order.prism || '',
+          prism_price: order.prism_price || 0,
+          other_option: order.other_option || '',
+          other_option_price: order.other_option_price || 0,
+          lens_selections_json: order.lens_selections_json || '',
+          total_lens_charges: order.total_lens_charges || 0,
+          total_lens_insurance_charges: order.total_lens_insurance_charges || 0,
+          regular_price: order.regular_price || 0,
+          sales_tax: order.sales_tax || 0,
+          material_copay: order.material_copay || order.insurance_copay || '',
+          you_pay: order.you_pay || 0,
+          you_saved: order.you_saved || 0,
+          insurance_regular_price: order.insurance_regular_price || 0,
+          insurance_sales_tax: order.insurance_sales_tax || 0,
+          insurance_you_pay: order.insurance_you_pay || 0,
+          insurance_final_price: order.insurance_final_price || 0,
+          warranty_type: order.warranty_type || 'None',
+          warranty_price: order.warranty_price || 0,
+          final_price: order.final_price || 0,
+          other_charges_adjustment: order.other_charges_adjustment || '',
+          other_charges_notes: order.other_charges_notes || '',
+          other_percent_adjustment: order.other_percent_adjustment || '',
+          percent_adjustment_regular: order.percent_adjustment_regular || 0,
+          percent_adjustment_insurance: order.percent_adjustment_insurance || 0,
+          iwellness: order.iwellness || 'no',
+          iwellness_price: order.iwellness_price || 0,
+          other_charge_1_type: order.other_charge_1_type || 'none',
+          other_charge_1_price: order.other_charge_1_price || '',
+          other_charge_2_type: order.other_charge_2_type || 'none',
+          other_charge_2_price: order.other_charge_2_price || '',
+          payment_today: order.payment_today || '',
+          total_balance: order.total_balance || 0,
+          total_balance_regular: order.total_balance_regular || 0,
+          balance_due: order.balance_due || 0,
+          balance_due_regular: order.balance_due_regular || 0,
+          payment_mode: order.payment_mode || 'with_insurance',
+          special_notes: order.special_notes || '',
+          verified_by: order.verified_by || '',
+          verified_by_employee_id: order.verified_by_employee_id || '',
+          service_rating: order.service_rating || ''
+        }));
+      } else {
+        alert('Error loading order for edit. Order not found.');
+        navigate('/history');
+      }
+    } catch (error) {
+      console.error('Error loading order for edit:', error);
+      alert('Error loading order for edit: ' + error.message);
+      navigate('/history');
+    }
+  };
 
   // Calculate final frame price when frame price, allowance, or discount changes
   useEffect(() => {
@@ -264,9 +396,9 @@ function OrderForm() {
       // When checked, clear and disable the frame pricing fields
       ...(checked ? {
         frame_sku: '',
-        frame_price: 0,
-        frame_allowance: 0,
-        frame_discount_percent: 0,
+        frame_price: '',
+        frame_allowance: '',
+        frame_discount_percent: '',
         final_frame_price: 0
       } : {})
     }));
@@ -455,6 +587,9 @@ function OrderForm() {
       insurance_sales_tax: insuranceSalesTax,
       insurance_you_pay: insuranceYouPay,
       insurance_final_price: insuranceFinalPrice,
+      // Percent adjustment values for display
+      percent_adjustment_regular: percentAdjustmentRegular,
+      percent_adjustment_insurance: percentAdjustmentInsurance,
       // Balance fields (includes all Other Charges)
       total_balance: totalBalanceInsurance,
       total_balance_regular: totalBalanceRegular,
@@ -466,16 +601,25 @@ function OrderForm() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const result = await window.electronAPI.createOrder(formData);
-
-    if (result.success) {
-      alert(`Order created successfully! Order Number: ${result.data.order_number}`);
-      //call print function
-       handlePrint();
-      // Reset form
-      window.location.reload();
+    if (isEditMode) {
+      // Update existing order
+      const result = await window.electronAPI.updateOrder(editOrderId, formData);
+      if (result.success) {
+        alert(`Order updated successfully! Order Number: ${originalOrderNumber}`);
+        navigate('/history');
+      } else {
+        alert(`Error updating order: ${result.error}`);
+      }
     } else {
-      alert(`Error creating order: ${result.error}`);
+      // Create new order
+      const result = await window.electronAPI.createOrder(formData);
+      if (result.success) {
+        alert(`Order created successfully! Order Number: ${result.data.order_number}`);
+        // Reset form
+        window.location.reload();
+      } else {
+        alert(`Error creating order: ${result.error}`);
+      }
     }
   };
 
@@ -483,61 +627,109 @@ function OrderForm() {
     // For now, just show alert - will implement after order is saved
     // Add print functionality if user presses the print we need to handle it like a submit then print
     e.preventDefault();
-    const result = await window.electronAPI.createOrder(formData);
 
-    if (result.success) {
-      const orderNumber = result.data.order_number;
-      const orderId = result.data.id;
+    if (isEditMode) {
+      // Update existing order then print
+      const result = await window.electronAPI.updateOrder(editOrderId, formData);
+      if (result.success) {
+        let successMessage = `Order updated successfully! Order Number: ${originalOrderNumber}`;
 
-      // Show success message for order creation
-      let successMessage = `Order created successfully! Order Number: ${orderNumber}`;
+        const printResult = await window.electronAPI.printOrder(editOrderId);
+        if (printResult.success) {
+          successMessage += `\n\nOrder printed successfully!`;
+        } else {
+          successMessage += `\n\nWarning: Order saved but printing failed: ${printResult.error}`;
+        }
 
-      const printResult = await window.electronAPI.printOrder(orderId);
-      if (printResult.success) {
-        successMessage += `\n\nOrder printed successfully!`;
+        alert(successMessage);
+        navigate('/history');
       } else {
-        successMessage += `\n\nWarning: Order saved but printing failed: ${printResult.error}`;
+        alert(`Error updating order: ${result.error}`);
       }
-
-      alert(successMessage);
     } else {
-      alert(`Error creating order: ${result.error}`);
-    } 
+      // Create new order then print
+      const result = await window.electronAPI.createOrder(formData);
+      if (result.success) {
+        const orderNumber = result.data.order_number;
+        const orderId = result.data.id;
+
+        let successMessage = `Order created successfully! Order Number: ${orderNumber}`;
+
+        const printResult = await window.electronAPI.printOrder(orderId);
+        if (printResult.success) {
+          successMessage += `\n\nOrder printed successfully!`;
+        } else {
+          successMessage += `\n\nWarning: Order saved but printing failed: ${printResult.error}`;
+        }
+
+        alert(successMessage);
+      } else {
+        alert(`Error creating order: ${result.error}`);
+      }
+    }
   };
 
   const handleSavePDF = async (e) => {
-   e.preventDefault();
+    e.preventDefault();
 
-    const result = await window.electronAPI.createOrder(formData);
+    if (isEditMode) {
+      // Update existing order then generate PDF
+      const result = await window.electronAPI.updateOrder(editOrderId, formData);
+      if (result.success) {
+        let successMessage = `Order updated successfully! Order Number: ${originalOrderNumber}`;
 
-    if (result.success) {
-      const orderNumber = result.data.order_number;
-      const orderId = result.data.id;
+        const pdfResult = await window.electronAPI.generatePDF(editOrderId, null);
+        if (pdfResult.success) {
+          successMessage += `\n\nPDF saved to: ${pdfResult.data.path}`;
+        } else {
+          successMessage += `\n\nWarning: Order saved but PDF generation failed: ${pdfResult.error}`;
+        }
 
-      // Show success message for order creation
-      let successMessage = `Order created successfully! Order Number: ${orderNumber}`;
-
-      // Automatically generate and save PDF
-      const pdfResult = await window.electronAPI.generatePDF(orderId, null);
-
-      if (pdfResult.success) {
-        successMessage += `\n\nPDF saved to: ${pdfResult.data.path}`;
+        alert(successMessage);
+        navigate('/history');
       } else {
-        successMessage += `\n\nWarning: Order saved but PDF generation failed: ${pdfResult.error}`;
+        alert(`Error updating order: ${result.error}`);
       }
-
-      alert(successMessage);
-      
     } else {
-      alert(`Error creating order: ${result.error}`);
+      // Create new order then generate PDF
+      const result = await window.electronAPI.createOrder(formData);
+      if (result.success) {
+        const orderNumber = result.data.order_number;
+        const orderId = result.data.id;
+
+        let successMessage = `Order created successfully! Order Number: ${orderNumber}`;
+
+        const pdfResult = await window.electronAPI.generatePDF(orderId, null);
+        if (pdfResult.success) {
+          successMessage += `\n\nPDF saved to: ${pdfResult.data.path}`;
+        } else {
+          successMessage += `\n\nWarning: Order saved but PDF generation failed: ${pdfResult.error}`;
+        }
+
+        alert(successMessage);
+      } else {
+        alert(`Error creating order: ${result.error}`);
+      }
+    }
+  };
+
+  // Prevent Enter key from submitting form accidentally
+  const handleKeyDown = (e) => {
+    // Allow Enter in textareas for multi-line input
+    if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
+      e.preventDefault();
     }
   };
 
   return (
     <div className="order-form-container">
-      <h2>Quality Eye Clinic Elgin — Optical Order</h2>
-      
-      <form onSubmit={handleSubmit} className="order-form">
+      <h2>
+        {isEditMode
+          ? `Edit Order — ${originalOrderNumber}`
+          : 'Quality Eye Clinic Elgin — Optical Order'}
+      </h2>
+
+      <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} className="order-form">
         {/* Patient Information Section */}
         <section className="form-section">
           <h3>Patient Information</h3>
@@ -684,6 +876,7 @@ function OrderForm() {
                   onChange={handleInputChange}
                   step="0.01"
                   min="0"
+                  placeholder="0.00"
                   disabled={formData.use_own_frame}
                 />
               </div>
@@ -926,8 +1119,15 @@ function OrderForm() {
         <section className="form-section">
           <h3>Other Charges</h3>
           <div className="other-charges-grid">
-            {/* Other % Adjustment Row */}
-            <div className="charge-row">
+            {/* Header Row for % Adjustment */}
+            <div className="charge-row charge-header">
+              <div className="charge-label"></div>
+              <div className="charge-input"></div>
+              <div className="charge-amount">Regular Discount</div>
+              <div className="charge-amount insurance">Your Discount</div>
+            </div>
+            {/* Other % Adjustment Row - with two price columns */}
+            <div className="charge-row charge-row-dual">
               <div className="charge-label">Other % Adjustment</div>
               <div className="charge-input">
                 <input
@@ -943,7 +1143,10 @@ function OrderForm() {
                 <span className="percent-symbol">%</span>
               </div>
               <div className="charge-amount">
-                -${parseFloat((formData.final_price - (parseFloat(formData.payment_today) || 0)) * ((parseFloat(formData.other_percent_adjustment) || 0) / 100)).toFixed(2)}
+                -${formData.percent_adjustment_regular.toFixed(2)}
+              </div>
+              <div className="charge-amount insurance">
+                -${formData.percent_adjustment_insurance.toFixed(2)}
               </div>
             </div>
 
@@ -1252,10 +1455,24 @@ function OrderForm() {
 
         {/* Action Buttons */}
         <div className="form-actions">
-          <button type="submit" className="btn btn-primary">Save Order</button>
-          <button type="button" className="btn btn-secondary" onClick={handlePrint}>Print</button>
-          <button type="button" className="btn btn-secondary" onClick={handleSavePDF}>Save as PDF</button>
-          <button type="button" className="btn btn-danger" onClick={() => window.location.reload()}>Clear Form</button>
+          <button type="submit" className="btn btn-primary">
+            {isEditMode ? 'Update Order' : 'Save Order'}
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={handlePrint}>
+            {isEditMode ? 'Update & Print' : 'Print'}
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={handleSavePDF}>
+            {isEditMode ? 'Update & Save PDF' : 'Save as PDF'}
+          </button>
+          {isEditMode ? (
+            <button type="button" className="btn btn-secondary" onClick={() => navigate('/history')}>
+              Cancel
+            </button>
+          ) : (
+            <button type="button" className="btn btn-danger" onClick={() => window.location.reload()}>
+              Clear Form
+            </button>
+          )}
         </div>
       </form>
     </div>
