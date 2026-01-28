@@ -1,10 +1,26 @@
 const { app, BrowserWindow, ipcMain, dialog, session } = require('electron');
 const path = require('path');
+const { autoUpdater } = require('electron-updater');
 const { closeDatabase } = require('./database/schema');
 const dbHandlers = require('./database/handlers');
 const { generatePDF } = require('./pdf/generator');
 const { printOrder } = require('./print/printer');
 const { formatError } = require('./utils/errorHandler');
+
+// Configure auto-updater
+autoUpdater.autoDownload = false; // Don't auto-download, let user initiate
+autoUpdater.autoInstallOnAppQuit = true; // Install update when app quits
+
+// Store for update state
+let updateState = {
+  checking: false,
+  available: false,
+  downloaded: false,
+  downloading: false,
+  progress: 0,
+  error: null,
+  updateInfo: null
+};
 
 /**
  * Format error for IPC response with user-friendly message
@@ -621,5 +637,145 @@ function registerIPCHandlers() {
       }
     };
   });
+
+  // ============ AUTO-UPDATE HANDLERS ============
+
+  // Check for updates
+  ipcMain.handle('check-for-updates', async () => {
+    try {
+      // Reset state
+      updateState = {
+        checking: true,
+        available: false,
+        downloaded: false,
+        downloading: false,
+        progress: 0,
+        error: null,
+        updateInfo: null
+      };
+
+      // Check for updates
+      const result = await autoUpdater.checkForUpdates();
+      return { success: true, data: result };
+    } catch (error) {
+      updateState.checking = false;
+      updateState.error = error.message;
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Download update
+  ipcMain.handle('download-update', async () => {
+    try {
+      updateState.downloading = true;
+      updateState.progress = 0;
+      await autoUpdater.downloadUpdate();
+      return { success: true };
+    } catch (error) {
+      updateState.downloading = false;
+      updateState.error = error.message;
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Install update and restart
+  ipcMain.handle('install-update', async () => {
+    try {
+      autoUpdater.quitAndInstall(false, true);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Get current update state
+  ipcMain.handle('get-update-state', async () => {
+    return { success: true, data: updateState };
+  });
 }
+
+// ============ AUTO-UPDATER EVENT LISTENERS ============
+
+autoUpdater.on('checking-for-update', () => {
+  console.log('Checking for update...');
+  updateState.checking = true;
+  updateState.error = null;
+  if (mainWindow) {
+    mainWindow.webContents.send('update-status', { status: 'checking' });
+  }
+});
+
+autoUpdater.on('update-available', (info) => {
+  console.log('Update available:', info.version);
+  updateState.checking = false;
+  updateState.available = true;
+  updateState.updateInfo = {
+    version: info.version,
+    releaseDate: info.releaseDate,
+    releaseNotes: info.releaseNotes
+  };
+  if (mainWindow) {
+    mainWindow.webContents.send('update-status', {
+      status: 'available',
+      info: updateState.updateInfo
+    });
+  }
+});
+
+autoUpdater.on('update-not-available', (info) => {
+  console.log('Update not available, current version is latest');
+  updateState.checking = false;
+  updateState.available = false;
+  if (mainWindow) {
+    mainWindow.webContents.send('update-status', {
+      status: 'not-available',
+      currentVersion: info.version
+    });
+  }
+});
+
+autoUpdater.on('error', (err) => {
+  console.error('Update error:', err);
+  updateState.checking = false;
+  updateState.downloading = false;
+  updateState.error = err.message;
+  if (mainWindow) {
+    mainWindow.webContents.send('update-status', {
+      status: 'error',
+      error: err.message
+    });
+  }
+});
+
+autoUpdater.on('download-progress', (progressObj) => {
+  const percent = Math.round(progressObj.percent);
+  console.log(`Download progress: ${percent}%`);
+  updateState.progress = percent;
+  if (mainWindow) {
+    mainWindow.webContents.send('update-status', {
+      status: 'downloading',
+      progress: percent,
+      bytesPerSecond: progressObj.bytesPerSecond,
+      transferred: progressObj.transferred,
+      total: progressObj.total
+    });
+  }
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+  console.log('Update downloaded:', info.version);
+  updateState.downloading = false;
+  updateState.downloaded = true;
+  updateState.updateInfo = {
+    version: info.version,
+    releaseDate: info.releaseDate,
+    releaseNotes: info.releaseNotes
+  };
+  if (mainWindow) {
+    mainWindow.webContents.send('update-status', {
+      status: 'downloaded',
+      info: updateState.updateInfo
+    });
+  }
+});
 

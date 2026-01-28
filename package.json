@@ -1,6 +1,6 @@
 {
   "name": "optical-order-manager",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Offline desktop application for managing optical orders at an eye doctor's office",
   "main": "src/main/main.js",
   "author": "Quality Eye Clinic",
@@ -19,6 +19,7 @@
   "dependencies": {
     "better-sqlite3": "^9.2.2",
     "electron-store": "^8.1.0",
+    "electron-updater": "^6.7.3",
     "joi": "^18.0.2",
     "pdfkit": "^0.14.0",
     "react": "^18.2.0",
@@ -41,7 +42,7 @@
     "productName": "Optical Order Manager",
     "copyright": "Copyright © 2024 Quality Eye Clinic",
     "directories": {
-      "output": "dist"
+      "output": "release"
     },
     "files": [
       "build/**/*",
@@ -49,9 +50,16 @@
       "node_modules/**/*",
       "package.json"
     ],
+    "publish": {
+      "provider": "github",
+      "owner": "yousefSaigh",
+      "repo": "optical-order",
+      "releaseType": "release"
+    },
     "win": {
       "target": "nsis",
-      "icon": "assets/logo.ico"
+      "icon": "assets/logo.ico",
+      "signAndEditExecutable": false
     },
     "nsis": {
       "oneClick": false,

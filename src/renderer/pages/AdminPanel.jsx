@@ -30,9 +30,36 @@ function AdminPanel() {
   const [defaultPdfLocation, setDefaultPdfLocation] = useState('');
   const [appVersion, setAppVersion] = useState(null);
 
+  // Update state
+  const [updateStatus, setUpdateStatus] = useState('idle'); // idle, checking, available, downloading, downloaded, not-available, error
+  const [updateInfo, setUpdateInfo] = useState(null);
+  const [updateProgress, setUpdateProgress] = useState(0);
+  const [updateError, setUpdateError] = useState(null);
+
   useEffect(() => {
     loadData();
     loadSettings();
+
+    // Set up update status listener
+    window.electronAPI.onUpdateStatus((data) => {
+      console.log('Update status:', data);
+      setUpdateStatus(data.status);
+
+      if (data.status === 'available' || data.status === 'downloaded') {
+        setUpdateInfo(data.info);
+      }
+      if (data.status === 'downloading') {
+        setUpdateProgress(data.progress || 0);
+      }
+      if (data.status === 'error') {
+        setUpdateError(data.error);
+      }
+    });
+
+    // Cleanup listener on unmount
+    return () => {
+      window.electronAPI.removeUpdateStatusListener();
+    };
   }, []);
 
   const loadData = async () => {
@@ -397,6 +424,51 @@ function AdminPanel() {
         alert('PDF save location reset to default');
       } else {
         alert(`Error resetting location: ${result.error}`);
+      }
+    }
+  };
+
+  // ============ UPDATE HANDLERS ============
+
+  const handleCheckForUpdates = async () => {
+    setUpdateStatus('checking');
+    setUpdateError(null);
+    setUpdateInfo(null);
+
+    try {
+      const result = await window.electronAPI.checkForUpdates();
+      if (!result.success) {
+        setUpdateStatus('error');
+        setUpdateError(result.error);
+      }
+    } catch (error) {
+      setUpdateStatus('error');
+      setUpdateError(error.message);
+    }
+  };
+
+  const handleDownloadUpdate = async () => {
+    setUpdateProgress(0);
+
+    try {
+      const result = await window.electronAPI.downloadUpdate();
+      if (!result.success) {
+        setUpdateStatus('error');
+        setUpdateError(result.error);
+      }
+    } catch (error) {
+      setUpdateStatus('error');
+      setUpdateError(error.message);
+    }
+  };
+
+  const handleInstallUpdate = async () => {
+    if (window.confirm('The application will close and restart to install the update. Do you want to continue?')) {
+      try {
+        await window.electronAPI.installUpdate();
+      } catch (error) {
+        setUpdateStatus('error');
+        setUpdateError(error.message);
       }
     }
   };
@@ -1050,24 +1122,104 @@ function AdminPanel() {
             </div>
           </div>
 
-          {/* Application Info Section */}
+          {/* Software Updates Section */}
           <div className="settings-section">
-            <h4>Application Information</h4>
-            <div className="app-info-card">
-              <div className="app-info-header">
-                <h3>Optical Order Manager</h3>
+            <h4>Software Updates</h4>
+            <p className="info-text">
+              Check for and install application updates from our update server.
+            </p>
+
+            <div className="update-section">
+              {/* Current Version Display */}
+              <div className="update-current-version">
+                <span className="version-label">Current Version:</span>
+                <span className="version-value">{appVersion?.version || 'Loading...'}</span>
               </div>
-              <div className="app-info-details">
-                {appVersion && (
-                  <>
-                    <div className="info-row">
-                      <span className="info-label">Version:</span>
-                      <span className="info-value">{appVersion.version}</span>
+
+              {/* Update Status Display */}
+              <div className="update-status">
+                {updateStatus === 'idle' && (
+                  <p className="status-message status-idle">Click the button below to check for updates.</p>
+                )}
+                {updateStatus === 'checking' && (
+                  <p className="status-message status-checking">
+                    <span className="spinner"></span> Checking for updates...
+                  </p>
+                )}
+                {updateStatus === 'not-available' && (
+                  <p className="status-message status-up-to-date">
+                    ✅ You are running the latest version!
+                  </p>
+                )}
+                {updateStatus === 'available' && (
+                  <div className="status-message status-available">
+                    <p>🎉 A new version is available!</p>
+                    {updateInfo && (
+                      <div className="update-info-box">
+                        <p><strong>New Version:</strong> {updateInfo.version}</p>
+                        {updateInfo.releaseDate && (
+                          <p><strong>Released:</strong> {new Date(updateInfo.releaseDate).toLocaleDateString()}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {updateStatus === 'downloading' && (
+                  <div className="status-message status-downloading">
+                    <p>⬇️ Downloading update...</p>
+                    <div className="progress-bar-container">
+                      <div
+                        className="progress-bar"
+                        style={{ width: `${updateProgress}%` }}
+                      ></div>
                     </div>
-                  </>
+                    <p className="progress-text">{updateProgress}% complete</p>
+                  </div>
+                )}
+                {updateStatus === 'downloaded' && (
+                  <div className="status-message status-downloaded">
+                    <p>✅ Update downloaded and ready to install!</p>
+                    {updateInfo && (
+                      <p>Version {updateInfo.version} will be installed when you restart.</p>
+                    )}
+                  </div>
+                )}
+                {updateStatus === 'error' && (
+                  <div className="status-message status-error">
+                    <p>❌ Error checking for updates</p>
+                    {updateError && <p className="error-details">{updateError}</p>}
+                  </div>
                 )}
               </div>
-              <p className="copyright-text">© 2024 Quality Eye Clinic. All rights reserved.</p>
+
+              {/* Action Buttons */}
+              <div className="update-actions">
+                {(updateStatus === 'idle' || updateStatus === 'not-available' || updateStatus === 'error') && (
+                  <button
+                    onClick={handleCheckForUpdates}
+                    className="btn btn-primary update-btn"
+                    disabled={updateStatus === 'checking'}
+                  >
+                    🔍 Check for Updates
+                  </button>
+                )}
+                {updateStatus === 'available' && (
+                  <button
+                    onClick={handleDownloadUpdate}
+                    className="btn btn-success update-btn"
+                  >
+                    ⬇️ Download Update
+                  </button>
+                )}
+                {updateStatus === 'downloaded' && (
+                  <button
+                    onClick={handleInstallUpdate}
+                    className="btn btn-success update-btn"
+                  >
+                    🔄 Install Update & Restart
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
