@@ -4,6 +4,8 @@ node_modules/
 # Build outputs
 build/
 dist/
+release/
+installer_output/
 .vite/
 
 # Database
