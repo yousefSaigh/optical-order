@@ -1,6 +1,6 @@
 {
   "name": "optical-order-manager",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Offline desktop application for managing optical orders at an eye doctor's office",
   "main": "src/main/main.js",
   "author": "Quality Eye Clinic",

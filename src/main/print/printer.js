@@ -320,6 +320,7 @@ function generatePrintHTML(order) {
     .pricing-table .pricing-value {
       text-align: right;
       width: 80px;
+      font-weight: bold;
     }
 
     .pricing-table .pricing-value.insurance {
@@ -363,6 +364,7 @@ function generatePrintHTML(order) {
     .payment-table td {
       padding: 2px 6px;
       border: 1px solid #ddd;
+      font-weight: bold;
     }
 
     .payment-table .balance-row td {
@@ -388,6 +390,10 @@ function generatePrintHTML(order) {
     .other-charge-item .label {
       font-weight: bold;
       color: #333;
+    }
+
+    .other-charge-item .value {
+      font-weight: bold;
     }
 
     .patient-info-grid {
@@ -438,6 +444,7 @@ function generatePrintHTML(order) {
       font-size: 9pt;
       padding: 1px 4px;
       border-bottom: 1px solid #ddd;
+      font-weight: bold;
     }
 
     .frame-info-field .value.discount {
@@ -478,11 +485,13 @@ function generatePrintHTML(order) {
 
     .lens-table .lens-selection {
       /* Takes remaining space */
+      font-weight: bold;
     }
 
     .lens-table .lens-price {
       text-align: right;
       width: 80px;
+      font-weight: bold;
     }
 
     .lens-table .lens-price.insurance {
